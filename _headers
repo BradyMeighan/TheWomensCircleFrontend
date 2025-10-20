@@ -1,0 +1,32 @@
+# Cloudflare Pages Headers Configuration
+# This file configures headers for your PWA deployment
+
+/*
+  # Security headers
+  X-Frame-Options: DENY
+  X-Content-Type-Options: nosniff
+  X-XSS-Protection: 1; mode=block
+  Referrer-Policy: strict-origin-when-cross-origin
+  
+  # PWA headers
+  X-Robots-Tag: index, follow
+  
+  # Cache control for static assets
+  Cache-Control: public, max-age=31536000, immutable
+
+# Service Worker - should not be cached
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  
+# Manifest file
+/manifest.webmanifest
+  Content-Type: application/manifest+json
+  Cache-Control: public, max-age=86400
+
+# API calls - no cache
+/api/*
+  Cache-Control: no-cache, no-store, must-revalidate
+
+# HTML files - short cache
+/*.html
+  Cache-Control: public, max-age=3600

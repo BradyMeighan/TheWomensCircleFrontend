@@ -1,0 +1,8 @@
+# Cloudflare Pages Redirects Configuration
+# This ensures your SPA routing works correctly
+
+# SPA fallback - redirect all non-file requests to index.html
+/*    /index.html   200
+
+# API requests should not be redirected (in case of any conflicts)
+/api/*  https://thewomenscirclebackend-production.up.railway.app/api/:splat  200
