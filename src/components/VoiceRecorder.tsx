@@ -14,7 +14,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const [visualizerData, setVisualizerData] = useState<number[]>(new Array(40).fill(0))
   const [error, setError] = useState<string | null>(null)
   const [isPlayingPreview, setIsPlayingPreview] = useState(false)
-  const [debugInfo, setDebugInfo] = useState<string>('')
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
@@ -63,7 +62,7 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       isMountedRef.current = false
       
       // Defer cleanup to check if remounting
-      const timeoutId = setTimeout(() => {
+      window.setTimeout(() => {
         if (!isMountedRef.current) {
           console.log('🛑 Component actually unmounted, cleaning up...')
           cleanup()
@@ -71,9 +70,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
           console.log('✅ Component remounted, skipping cleanup')
         }
       }, 100) // 100ms delay to allow remount
-      
-      // Cleanup the timeout if component remounts
-      return () => clearTimeout(timeoutId)
     }
   }, [])
 
@@ -81,11 +77,9 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const forceStopAllTracks = () => {
     if (streamRef.current) {
       const trackCount = streamRef.current.getTracks().length
-      setDebugInfo(`Stopping ${trackCount} tracks...`)
       console.log('🎤 iOS: Aggressively stopping', trackCount, 'tracks...')
       
       streamRef.current.getTracks().forEach((track, index) => {
-        const beforeState = `${track.kind}:${track.readyState}:${track.enabled}`
         console.log(`🎤 iOS: Stopping track ${index}:`, track.kind, track.readyState, track.enabled)
         
         // iOS: Multiple stop approaches
@@ -108,19 +102,15 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
           // Ignore clone errors
         }
         
-        const afterState = `${track.kind}:${track.readyState}:${track.enabled}`
-        setDebugInfo(prev => prev + `\nTrack ${index}: ${beforeState} → ${afterState}`)
         console.log(`🎤 iOS: Track ${index} after stop:`, track.readyState, track.enabled)
       })
       
       // Completely nullify the stream
       streamRef.current = null
-      setDebugInfo(prev => prev + '\nStream nullified')
       
       // iOS: Multiple cleanup attempts with different timings
       setTimeout(() => {
         console.log('🧹 iOS: First cleanup attempt...')
-        setDebugInfo(prev => prev + '\nGC attempt 1')
         if (typeof window !== 'undefined') {
           if ((window as any).gc) {
             (window as any).gc()
@@ -130,7 +120,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       
       setTimeout(() => {
         console.log('🧹 iOS: Second cleanup attempt...')
-        setDebugInfo(prev => prev + '\nCache clear attempt')
         if (navigator.mediaDevices && (navigator.mediaDevices as any).clearCache) {
           (navigator.mediaDevices as any).clearCache()
         }
@@ -138,7 +127,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       
       setTimeout(() => {
         console.log('🧹 iOS: Final cleanup attempt...')
-        setDebugInfo(prev => prev + '\nFinal GC attempt')
         if ((window as any).gc) {
           (window as any).gc()
         }
@@ -227,6 +215,20 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       // Clear the permission request flag since we succeeded
       isRequestingPermissionRef.current = false
 
+      // Monitor if track stops unexpectedly (iOS issue)
+      const tracks = stream.getTracks()
+      tracks.forEach(track => {
+        track.onended = () => {
+          console.error('❌ Microphone track ended unexpectedly!')
+          // Only show error if we're still supposed to be recording
+          if (isMountedRef.current && streamRef.current) {
+            setError('Microphone stopped unexpectedly. Please restart your phone and try again.')
+            setIsRecording(false)
+            cleanup()
+          }
+        }
+      })
+
       // Set up audio context and analyser for visualization
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
       const analyser = audioContextRef.current.createAnalyser()
@@ -287,6 +289,23 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
         const elapsed = Math.floor((Date.now() - startTime) / 1000)
         setDuration(elapsed)
       }, 100) // Update more frequently for smoother display
+
+      // Check if recording is still active after 2 seconds (iOS issue detection)
+      setTimeout(() => {
+        if (isMountedRef.current && streamRef.current) {
+          const tracks = streamRef.current.getTracks()
+          const anyTrackEnded = tracks.some(track => track.readyState === 'ended')
+          
+          if (anyTrackEnded) {
+            console.error('❌ Microphone died within 2 seconds!')
+            setError('Microphone stopped working. Please restart your phone and try again.')
+            setIsRecording(false)
+            cleanup()
+          } else {
+            console.log('✅ Recording is stable after 2 seconds')
+          }
+        }
+      }, 2000)
 
     } catch (err: any) {
       console.error('❌ Error accessing microphone:', err)
@@ -416,6 +435,8 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   }
 
   if (error) {
+    const isRestartError = error.includes('restart your phone')
+    
     return (
       <motion.div
         className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4"
@@ -434,8 +455,15 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">Microphone Access Required</h3>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">
+              {isRestartError ? 'Phone Restart Required' : 'Microphone Access Required'}
+            </h3>
             <p className="text-sm text-gray-600">{error}</p>
+            {isRestartError && (
+              <p className="text-xs text-gray-500 mt-3">
+                This is a known iOS issue. After restarting your phone, voice recording will work again.
+              </p>
+            )}
           </div>
           <button
             onClick={handleCancel}
