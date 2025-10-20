@@ -279,7 +279,7 @@ function MeetTheCircle({ onBack }: MeetTheCircleProps) {
                           transition={{ delay: 0.7 }}
                         >
                           <h3 className="text-lg font-semibold text-gray-900 mb-2">About</h3>
-                          <p className="text-gray-700 leading-relaxed">{currentMember.profile.bio}</p>
+                          <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">{currentMember.profile.bio}</p>
                         </motion.div>
                       )}
 

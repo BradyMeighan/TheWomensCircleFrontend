@@ -25,6 +25,7 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const isMountedRef = useRef(true) // Track if component is actually mounted
+  const isRequestingPermissionRef = useRef(false) // Prevent double permission requests
 
   useEffect(() => {
     console.log('🎤 VoiceRecorder mounting...')
@@ -148,6 +149,9 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const cleanup = () => {
     console.log('🧹 Cleaning up voice recorder (iOS optimized)...')
     
+    // Clear permission request flag
+    isRequestingPermissionRef.current = false
+    
     // Stop timer
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current)
@@ -194,9 +198,9 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   }
 
   const startRecording = async () => {
-    // Prevent multiple simultaneous recordings
-    if (streamRef.current || mediaRecorderRef.current) {
-      console.warn('⚠️ Already recording, skipping...')
+    // Prevent multiple simultaneous recordings OR permission requests
+    if (streamRef.current || mediaRecorderRef.current || isRequestingPermissionRef.current) {
+      console.warn('⚠️ Already recording or requesting permission, skipping...')
       return
     }
     
@@ -204,7 +208,9 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       console.log('🎤 Starting recording...')
       setError(null)
       setDuration(0) // Reset duration
-      setDebugInfo('Requesting microphone access...')
+      
+      // Set flag to prevent double permission requests
+      isRequestingPermissionRef.current = true
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -217,7 +223,9 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       // Store stream reference for cleanup
       streamRef.current = stream
       console.log('✅ Got media stream with', stream.getTracks().length, 'tracks')
-      setDebugInfo(`Got stream with ${stream.getTracks().length} tracks`)
+      
+      // Clear the permission request flag since we succeeded
+      isRequestingPermissionRef.current = false
 
       // Set up audio context and analyser for visualization
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -283,6 +291,10 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
     } catch (err: any) {
       console.error('❌ Error accessing microphone:', err)
       setError(err.message || 'Failed to access microphone. Please check your permissions.')
+      
+      // Clear the permission request flag on error
+      isRequestingPermissionRef.current = false
+      
       // Clean up on error
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop())
@@ -318,25 +330,20 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const stopRecording = () => {
     console.log('⏸️ Stopping recording...')
     
-    // Stop timers and animation
+    // IMPORTANT: Set recording to false FIRST to prevent UI issues
+    setIsRecording(false)
+    
+    // Stop timers and animation - use window.clearInterval for safety
     if (timerIntervalRef.current) {
-      clearInterval(timerIntervalRef.current)
+      window.clearInterval(timerIntervalRef.current)
       timerIntervalRef.current = null
     }
     if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current)
+      window.cancelAnimationFrame(animationFrameRef.current)
       animationFrameRef.current = null
     }
     
-    // Stop microphone tracks
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => {
-        track.stop()
-        console.log('🎤 Microphone track stopped')
-      })
-    }
-    
-    // Stop the media recorder
+    // Stop the media recorder FIRST (before stopping tracks)
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try {
         mediaRecorderRef.current.stop()
@@ -346,7 +353,16 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       }
     }
     
-    setIsRecording(false)
+    // Stop microphone tracks AFTER recorder stopped
+    if (streamRef.current) {
+      console.log('🎤 Stopping microphone tracks...')
+      streamRef.current.getTracks().forEach(track => {
+        if (track.readyState === 'live') {
+          track.stop()
+          console.log('🎤 Track stopped:', track.kind, track.readyState)
+        }
+      })
+    }
   }
 
   const togglePreview = async () => {
@@ -516,13 +532,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
             </span>
           </div>
           
-          {/* Debug Info for iOS */}
-          {debugInfo && (
-            <div className="mt-4 p-3 bg-yellow-100 rounded-lg text-xs text-left font-mono max-h-32 overflow-y-auto">
-              <div className="font-bold mb-1">iOS Debug Info:</div>
-              <pre className="whitespace-pre-wrap">{debugInfo}</pre>
-            </div>
-          )}
         </div>
 
         {/* Controls */}

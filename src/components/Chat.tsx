@@ -412,18 +412,65 @@ function Chat({ onBack, user }: ChatProps) {
     }
 
     try {
+      // Optimistic UI update - show images immediately
+      const tempId = `temp-${Date.now()}`
+      const localImageUrls = await Promise.all(
+        validFiles.map(file => {
+          return new Promise<string>((resolve) => {
+            const reader = new FileReader()
+            reader.onload = (e) => resolve(e.target?.result as string)
+            reader.readAsDataURL(file)
+          })
+        })
+      )
+      
+      const optimisticMessage = {
+        _id: tempId,
+        content: newMessage.trim() || (validFiles.length > 1 ? `${validFiles.length} images` : 'Image'),
+        author: {
+          _id: user._id,
+          firstName: user.firstName || user.username,
+          lastName: user.lastName || '',
+          profile: { profilePicture: '' }
+        },
+        channel: selectedChannel._id,
+        type: 'image' as const,
+        attachments: localImageUrls.map((url, i) => ({
+          type: 'image' as const,
+          url,
+          filename: validFiles[i].name,
+          size: validFiles[i].size,
+          _id: `temp-attach-${i}`
+        })),
+        reactions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      }
+      
+      // Add optimistic message immediately
+      setMessages(prev => [...prev, optimisticMessage as any])
+      setNewMessage('')
+      
+      // Scroll to bottom
+      shouldAutoScroll.current = true
+      setTimeout(() => {
+        requestAnimationFrame(() => scrollToBottom())
+      }, 50)
+
       // Create FormData for multipart upload
       const formData = new FormData()
       validFiles.forEach(file => {
         formData.append('images', file)
       })
-      formData.append('caption', newMessage.trim() || (validFiles.length > 1 ? `${validFiles.length} images` : 'Image'))
+      formData.append('caption', optimisticMessage.content)
 
-      // Upload images
+      // Upload images in background
       const token = localStorage.getItem('authToken')
       
       if (!token) {
         alert('You must be logged in to upload images')
+        // Remove optimistic message on error
+        setMessages(prev => prev.filter(m => m._id !== tempId))
         return
       }
 
@@ -439,26 +486,15 @@ function Chat({ onBack, user }: ChatProps) {
 
       if (response.status === 401) {
         alert('Your session has expired. Please log in again.')
+        setMessages(prev => prev.filter(m => m._id !== tempId))
         return
       }
 
       if (data.success) {
-        // Add image message to local state
-        setMessages(prev => {
-          const exists = prev.some(m => m._id === data.data._id)
-          if (exists) {
-            return prev
-          }
-          return [...prev, data.data]
-        })
-        
-        // Enable auto-scroll
-        shouldAutoScroll.current = true
-        
-        // Scroll to bottom
-        setTimeout(() => {
-          requestAnimationFrame(() => scrollToBottom())
-        }, 50)
+        // Replace optimistic message with real one
+        setMessages(prev => prev.map(m => 
+          m._id === tempId ? data.data : m
+        ))
         
         // Broadcast via socket
         socket.emit('send-message', {
@@ -1568,41 +1604,43 @@ function Chat({ onBack, user }: ChatProps) {
                                     </AnimatePresence>
                                   </div>
                                   
-                                  {/* Carousel navigation */}
+                                  {/* Carousel navigation - bigger touch targets */}
                                   {message.attachments.length > 1 && (
                                     <>
-                                      <motion.button
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation()
+                                          e.preventDefault()
                                           const currentIndex = carouselIndexes[message._id] || 0
                                           const newIndex = currentIndex === 0 ? message.attachments!.length - 1 : currentIndex - 1
                                           setCarouselIndexes(prev => ({ ...prev, [message._id]: newIndex }))
                                         }}
-                                        className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg z-10 active:scale-95"
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        transition={{ duration: 0.15 }}
+                                        className="absolute left-0 top-0 bottom-0 w-16 flex items-center justify-start pl-2 z-20"
+                                        style={{ touchAction: 'manipulation' }}
                                       >
-                                        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                        </svg>
-                                      </motion.button>
-                                      <motion.button
+                                        <div className="p-3 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg active:scale-95 transition-transform">
+                                          <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                          </svg>
+                                        </div>
+                                      </button>
+                                      <button
                                         onClick={(e) => {
                                           e.stopPropagation()
+                                          e.preventDefault()
                                           const currentIndex = carouselIndexes[message._id] || 0
                                           const newIndex = currentIndex === message.attachments!.length - 1 ? 0 : currentIndex + 1
                                           setCarouselIndexes(prev => ({ ...prev, [message._id]: newIndex }))
                                         }}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg z-10 active:scale-95"
-                                        whileHover={{ scale: 1.1 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        transition={{ duration: 0.15 }}
+                                        className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 z-20"
+                                        style={{ touchAction: 'manipulation' }}
                                       >
-                                        <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                        </svg>
-                                      </motion.button>
+                                        <div className="p-3 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg active:scale-95 transition-transform">
+                                          <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                          </svg>
+                                        </div>
+                                      </button>
                                       
                                       {/* Image counter */}
                                       <motion.div 

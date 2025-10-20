@@ -838,41 +838,43 @@ function Gala({ onBack, user }: GalaProps) {
                               </AnimatePresence>
                             </div>
                             
-                            {/* Carousel navigation */}
+                            {/* Carousel navigation - bigger touch targets */}
                             {message.attachments.length > 1 && (
                               <>
-                                <motion.button
+                                <button
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    e.preventDefault()
                                     const currentIndex = carouselIndexes[message._id] || 0
                                     const newIndex = currentIndex === 0 ? message.attachments!.length - 1 : currentIndex - 1
                                     setCarouselIndexes(prev => ({ ...prev, [message._id]: newIndex }))
                                   }}
-                                  className="absolute left-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg z-10 active:scale-95"
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  transition={{ duration: 0.15 }}
+                                  className="absolute left-0 top-0 bottom-0 w-16 flex items-center justify-start pl-2 z-20"
+                                  style={{ touchAction: 'manipulation' }}
                                 >
-                                  <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                  </svg>
-                                </motion.button>
-                                <motion.button
+                                  <div className="p-3 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg active:scale-95 transition-transform">
+                                    <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                  </div>
+                                </button>
+                                <button
                                   onClick={(e) => {
                                     e.stopPropagation()
+                                    e.preventDefault()
                                     const currentIndex = carouselIndexes[message._id] || 0
                                     const newIndex = currentIndex === message.attachments!.length - 1 ? 0 : currentIndex + 1
                                     setCarouselIndexes(prev => ({ ...prev, [message._id]: newIndex }))
                                   }}
-                                  className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg z-10 active:scale-95"
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  transition={{ duration: 0.15 }}
+                                  className="absolute right-0 top-0 bottom-0 w-16 flex items-center justify-end pr-2 z-20"
+                                  style={{ touchAction: 'manipulation' }}
                                 >
-                                  <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                  </svg>
-                                </motion.button>
+                                  <div className="p-3 bg-white/90 backdrop-blur-sm hover:bg-white rounded-full shadow-lg active:scale-95 transition-transform">
+                                    <svg className="w-5 h-5 text-gray-800" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </div>
+                                </button>
                                 
                                 {/* Image counter */}
                                 <motion.div 
