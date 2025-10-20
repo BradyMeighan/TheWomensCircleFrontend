@@ -5,6 +5,30 @@ import { apiCall } from '../config/api'
 import VoiceRecorder from './VoiceRecorder'
 import AudioPlayer from './AudioPlayer'
 
+// Utility function to convert URLs to clickable links
+const linkifyText = (text: string) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 interface ChatProps {
   onBack: () => void
   user: { _id: string; username: string; email?: string; firstName?: string; lastName?: string; isAdmin?: boolean } | null
@@ -36,6 +60,8 @@ interface Message {
   }
   createdAt: string
   type: 'text' | 'image' | 'file' | 'system' | 'voice'
+  edited?: boolean
+  editedAt?: string
   reactions?: {
     emoji: string
     users: string[]
@@ -78,6 +104,8 @@ function Chat({ onBack, user }: ChatProps) {
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
   const [editingGroup, setEditingGroup] = useState<Channel | null>(null)
   const [managingChannel, setManagingChannel] = useState<Channel | null>(null)
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [editedContent, setEditedContent] = useState('')
   const [showChannelEditModal, setShowChannelEditModal] = useState<Channel | null>(null)
   const [editChannelData, setEditChannelData] = useState({
     sortOrder: 0
@@ -174,6 +202,13 @@ function Chat({ onBack, user }: ChatProps) {
       newSocket.on('message-deleted', (data: { messageId: string; channelId: string }) => {
         console.log('🗑️ Message deletion received:', data)
         setMessages(prev => prev.filter(msg => msg._id !== data.messageId))
+      })
+
+      newSocket.on('message-edited', (data: { messageId: string; channelId: string; content: string; edited: boolean; editedAt: string }) => {
+        console.log('✏️ Message edit received:', data)
+        setMessages(prev => prev.map(msg => 
+          msg._id === data.messageId ? { ...msg, content: data.content, edited: data.edited, editedAt: data.editedAt } : msg
+        ))
       })
 
     setSocket(newSocket)
@@ -965,6 +1000,54 @@ function Chat({ onBack, user }: ChatProps) {
     }
   }
 
+  const startEditMessage = (message: Message) => {
+    setEditingMessage(message)
+    setEditedContent(message.content)
+  }
+
+  const cancelEditMessage = () => {
+    setEditingMessage(null)
+    setEditedContent('')
+  }
+
+  const saveEditMessage = async () => {
+    if (!selectedChannel || !user || !editingMessage) return
+    if (!editedContent.trim()) return
+
+    try {
+      const response = await apiCall(
+        `/api/chat/channels/${selectedChannel._id}/messages/${editingMessage._id}`,
+        'PUT',
+        { content: editedContent.trim() }
+      )
+
+      if (response.success) {
+        // Update the message in local state
+        setMessages(messages.map(msg => 
+          msg._id === editingMessage._id ? response.data : msg
+        ))
+        
+        // Emit edit via socket for real-time updates
+        if (socket) {
+          socket.emit('message-edited', {
+            messageId: editingMessage._id,
+            channelId: selectedChannel._id,
+            content: response.data.content,
+            edited: response.data.edited,
+            editedAt: response.data.editedAt
+          })
+        }
+
+        // Clear editing state
+        setEditingMessage(null)
+        setEditedContent('')
+      }
+    } catch (error) {
+      console.error('Failed to edit message:', error)
+      alert('Failed to edit message. Please try again.')
+    }
+  }
+
   const saveImage = async (imageUrl: string, filename?: string) => {
     try {
       // Convert to blob first
@@ -1718,7 +1801,44 @@ function Chat({ onBack, user }: ChatProps) {
                           )}
                           {/* Regular text message */}
                           {message.type !== 'image' && message.type !== 'voice' && (
-                            <p className="text-sm break-words leading-relaxed text-gray-800 whitespace-pre-wrap">{message.content}</p>
+                            <>
+                              {editingMessage && editingMessage._id === message._id ? (
+                                // Inline edit mode
+                                <div className="space-y-2">
+                                  <textarea
+                                    value={editedContent}
+                                    onChange={(e) => setEditedContent(e.target.value)}
+                                    className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                                    rows={3}
+                                    autoFocus
+                                  />
+                                  <div className="flex space-x-2">
+                                    <button
+                                      onClick={saveEditMessage}
+                                      className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      onClick={cancelEditMessage}
+                                      className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                          // Normal display mode
+                          <div>
+                            <p className="text-sm break-words leading-relaxed text-gray-800 whitespace-pre-wrap">
+                              {linkifyText(message.content)}
+                            </p>
+                            {message.edited && (
+                              <span className="text-xs text-gray-500 italic ml-2">(edited)</span>
+                            )}
+                          </div>
+                              )}
+                            </>
                           )}
                         </div>
                         
@@ -1779,6 +1899,19 @@ function Chat({ onBack, user }: ChatProps) {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                               </svg>
                             </button>
+                            
+                            {/* Edit Button (only for own text messages) */}
+                            {(user && message.author._id === user._id && message.type === 'text') && (
+                              <button
+                                onClick={() => startEditMessage(message)}
+                                className="p-1 hover:bg-blue-100 rounded text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                                title="Edit message"
+                              >
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                              </button>
+                            )}
                             
                             {/* Delete Button (only for own messages or if admin) */}
                             {(user && (message.author._id === user._id || user.isAdmin)) && (

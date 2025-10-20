@@ -4,6 +4,30 @@ import { io, Socket } from 'socket.io-client'
 import VoiceRecorder from './VoiceRecorder'
 import AudioPlayer from './AudioPlayer'
 
+// Utility function to convert URLs to clickable links
+const linkifyText = (text: string) => {
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const parts = text.split(urlRegex)
+  
+  return parts.map((part, index) => {
+    if (urlRegex.test(part)) {
+      return (
+        <a
+          key={index}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 hover:text-blue-800 underline break-all"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {part}
+        </a>
+      )
+    }
+    return part
+  })
+}
+
 interface GalaProps {
   onBack: () => void
   user: { _id: string; username: string; email: string; firstName: string; lastName: string; isAdmin: boolean; profile?: { profilePicture?: string } } | null
@@ -34,6 +58,8 @@ interface Message {
   } | null
   createdAt: string
   type?: 'text' | 'image' | 'file' | 'voice'
+  edited?: boolean
+  editedAt?: string
   attachments?: {
     type: 'image' | 'file' | 'voice'
     url: string
@@ -59,6 +85,8 @@ function Gala({ onBack, user }: GalaProps) {
   const [carouselIndexes, setCarouselIndexes] = useState<Record<string, number>>({}) // Track carousel index for each message
   const [longPressTimer, setLongPressTimer] = useState<number | null>(null)
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false)
+  const [editingMessage, setEditingMessage] = useState<Message | null>(null)
+  const [editedContent, setEditedContent] = useState('')
   
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -152,6 +180,13 @@ function Gala({ onBack, user }: GalaProps) {
       newSocket.on('message-deleted', (data: { messageId: string; channelId: string }) => {
         console.log('🗑️ Message deletion received:', data)
         setMessages(prev => prev.filter(msg => msg._id !== data.messageId))
+      })
+
+      newSocket.on('message-edited', (data: { messageId: string; channelId: string; content: string; edited: boolean; editedAt: string }) => {
+        console.log('✏️ Message edit received:', data)
+        setMessages(prev => prev.map(msg => 
+          msg._id === data.messageId ? { ...msg, content: data.content, edited: data.edited, editedAt: data.editedAt } : msg
+        ))
       })
 
       newSocket.on('disconnect', () => {
@@ -435,6 +470,55 @@ function Gala({ onBack, user }: GalaProps) {
     } catch (error) {
       console.error('Failed to delete message:', error)
       alert('Failed to delete message. Please try again.')
+    }
+  }
+
+  const startEditMessage = (message: Message) => {
+    setEditingMessage(message)
+    setEditedContent(message.content)
+  }
+
+  const cancelEditMessage = () => {
+    setEditingMessage(null)
+    setEditedContent('')
+  }
+
+  const saveEditMessage = async () => {
+    if (!channelId || !user || !editingMessage) return
+    if (!editedContent.trim()) return
+
+    try {
+      const { apiCall } = await import('../config/api')
+      const response = await apiCall(
+        `/api/chat/channels/${channelId}/messages/${editingMessage._id}`,
+        'PUT',
+        { content: editedContent.trim() }
+      )
+
+      if (response.success) {
+        // Update the message in local state
+        setMessages(prev => prev.map(msg => 
+          msg._id === editingMessage._id ? response.data : msg
+        ))
+        
+        // Emit edit via socket for real-time updates
+        if (socket) {
+          socket.emit('message-edited', {
+            messageId: editingMessage._id,
+            channelId,
+            content: response.data.content,
+            edited: response.data.edited,
+            editedAt: response.data.editedAt
+          })
+        }
+
+        // Clear editing state
+        setEditingMessage(null)
+        setEditedContent('')
+      }
+    } catch (error) {
+      console.error('Failed to edit message:', error)
+      alert('Failed to edit message. Please try again.')
     }
   }
 
@@ -939,7 +1023,7 @@ function Gala({ onBack, user }: GalaProps) {
                         )}
                         
                         {message.content !== 'Image' && !message.content.includes('images') && (
-                          <p className="text-sm text-gray-800 mt-2 px-2 pb-1 whitespace-pre-wrap">{message.content}</p>
+                          <p className="text-sm text-gray-800 mt-2 px-2 pb-1 whitespace-pre-wrap">{linkifyText(message.content)}</p>
                         )}
                       </div>
                     )}
@@ -952,7 +1036,44 @@ function Gala({ onBack, user }: GalaProps) {
                     )}
                     {/* Regular text message */}
                     {message.type !== 'image' && message.type !== 'voice' && (
-                      <p className="text-sm break-words leading-relaxed whitespace-pre-wrap text-gray-800">{message.content}</p>
+                      <>
+                        {editingMessage && editingMessage._id === message._id ? (
+                          // Inline edit mode
+                          <div className="space-y-2">
+                            <textarea
+                              value={editedContent}
+                              onChange={(e) => setEditedContent(e.target.value)}
+                              className="w-full px-3 py-2 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                              rows={3}
+                              autoFocus
+                            />
+                            <div className="flex space-x-2">
+                              <button
+                                onClick={saveEditMessage}
+                                className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={cancelEditMessage}
+                                className="px-3 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          // Normal display mode
+                          <div>
+                            <p className="text-sm break-words leading-relaxed text-gray-800 whitespace-pre-wrap">
+                              {linkifyText(message.content)}
+                            </p>
+                            {message.edited && (
+                              <span className="text-xs text-gray-500 italic ml-2">(edited)</span>
+                            )}
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                   
@@ -996,6 +1117,19 @@ function Gala({ onBack, user }: GalaProps) {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                           </svg>
                         </button>
+                        
+                        {/* Edit Button (only for own text messages) */}
+                        {(user && message.author._id === user._id && message.type === 'text') && (
+                          <button
+                            onClick={() => startEditMessage(message)}
+                            className="p-1 hover:bg-blue-100/60 rounded text-xs text-blue-600 hover:text-blue-800 transition-colors"
+                            title="Edit message"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                        )}
                         
                         {/* Delete Button (only for own messages or if admin) */}
                         {(user && (message.author._id === user._id || user.isAdmin)) && (

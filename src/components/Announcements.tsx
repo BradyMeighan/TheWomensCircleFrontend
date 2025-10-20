@@ -24,6 +24,8 @@ function Announcements({ onBack, user }: AnnouncementsProps) {
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingAnnouncement, setEditingAnnouncement] = useState<Announcement | null>(null)
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: '',
     content: '',
@@ -36,7 +38,7 @@ function Announcements({ onBack, user }: AnnouncementsProps) {
   const [touchIndicators, setTouchIndicators] = useState<Array<{id: number, x: number, y: number}>>([])
   
   // Show debug mode only when modal is open (admin only)
-  const showDebugMode = showCreateModal && user?.isAdmin
+  const showDebugMode = (showCreateModal || showEditModal) && user?.isAdmin
 
   useEffect(() => {
     fetchAnnouncements()
@@ -191,6 +193,76 @@ function Announcements({ onBack, user }: AnnouncementsProps) {
     }
   }
 
+  const editAnnouncement = (announcement: Announcement) => {
+    setEditingAnnouncement(announcement)
+    setNewAnnouncement({
+      title: announcement.title,
+      content: announcement.content,
+      priority: announcement.priority,
+      isPinned: announcement.isPinned
+    })
+    setShowEditModal(true)
+  }
+
+  const updateAnnouncement = async () => {
+    if (!editingAnnouncement) return
+    
+    // Clear any previous errors
+    setErrorMessage('')
+    
+    // Validate inputs
+    if (!newAnnouncement.title.trim()) {
+      setErrorMessage('Please enter a title for your announcement')
+      return
+    }
+    
+    if (newAnnouncement.title.length > 200) {
+      setErrorMessage('Title is too long (maximum 200 characters)')
+      return
+    }
+    
+    if (!newAnnouncement.content.trim()) {
+      setErrorMessage('Please enter content for your announcement')
+      return
+    }
+    
+    if (newAnnouncement.content.length > 2000) {
+      setErrorMessage('Content is too long (maximum 2000 characters)')
+      return
+    }
+    
+    // Prevent double-clicks
+    if (isCreating) {
+      console.log('⚠️ Already updating, ignoring duplicate click')
+      return
+    }
+    
+    setIsCreating(true)
+    
+    try {
+      const { apiCall } = await import('../config/api')
+      const response = await apiCall(`/api/announcements/${editingAnnouncement._id}`, 'PUT', newAnnouncement)
+      
+      if (response.success) {
+        setAnnouncements(announcements.map(a => 
+          a._id === editingAnnouncement._id ? response.data : a
+        ))
+        setShowEditModal(false)
+        setEditingAnnouncement(null)
+        setNewAnnouncement({ title: '', content: '', priority: 'normal', isPinned: false })
+        setErrorMessage('')
+        alert('✅ Announcement updated successfully!')
+      }
+    } catch (error: any) {
+      console.error('Failed to update announcement:', error)
+      const errorMsg = error?.message || 'Failed to update announcement. Please try again.'
+      setErrorMessage(errorMsg)
+      alert(`Failed to update announcement: ${errorMsg}`)
+    } finally {
+      setIsCreating(false)
+    }
+  }
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'urgent': return 'bg-red-100 text-red-600 border-red-200'
@@ -334,15 +406,26 @@ function Announcements({ onBack, user }: AnnouncementsProps) {
                     <div className="flex items-center space-x-3">
                       <span>{new Date(announcement.createdAt).toLocaleDateString()}</span>
                       {user?.isAdmin && (
-                        <button
-                          onClick={() => deleteAnnouncement(announcement._id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
-                          title="Delete announcement"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => editAnnouncement(announcement)}
+                            className="p-1 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                            title="Edit announcement"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => deleteAnnouncement(announcement._id)}
+                            className="p-1 text-red-600 hover:bg-red-50 rounded transition-colors"
+                            title="Delete announcement"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </>
                       )}
                     </div>
                   </div>
@@ -531,6 +614,195 @@ function Announcements({ onBack, user }: AnnouncementsProps) {
                       </>
                     ) : (
                       <span>Create Announcement</span>
+                    )}
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Edit Announcement Modal */}
+      <AnimatePresence>
+        {showEditModal && editingAnnouncement && (
+          <motion.div
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => {
+              setShowEditModal(false)
+              setEditingAnnouncement(null)
+              setErrorMessage('')
+            }}
+            style={{ 
+              paddingBottom: 'env(safe-area-inset-bottom, 20px)',
+              WebkitOverflowScrolling: 'touch'
+            }}
+          >
+            <motion.div
+              className="bg-white rounded-3xl border-2 border-gray-800 max-w-2xl w-full my-auto"
+              style={{
+                maxHeight: 'calc(100dvh - 100px)',
+                pointerEvents: 'auto'
+              }}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.8, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 overflow-y-auto" style={{ maxHeight: 'calc(100dvh - 120px)' }}>
+                <h3 className="text-2xl font-semibold text-gray-900 mb-6">Edit Announcement</h3>
+                
+                {/* Error Message */}
+                {errorMessage && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <div className="flex items-start space-x-2">
+                      <svg className="w-5 h-5 text-red-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <div>
+                        <p className="text-sm font-medium text-red-800">Error</p>
+                        <p className="text-sm text-red-700">{errorMessage}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Title ({newAnnouncement.title.length}/200)
+                    </label>
+                    <input
+                      type="text"
+                      value={newAnnouncement.title}
+                      onChange={(e) => {
+                        if (e.target.value.length <= 200) {
+                          setNewAnnouncement({...newAnnouncement, title: e.target.value})
+                        }
+                      }}
+                      placeholder="Enter announcement title..."
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      maxLength={200}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Content ({newAnnouncement.content.length}/2000)
+                    </label>
+                    <textarea
+                      value={newAnnouncement.content}
+                      onChange={(e) => {
+                        if (e.target.value.length <= 2000) {
+                          setNewAnnouncement({...newAnnouncement, content: e.target.value})
+                        }
+                      }}
+                      placeholder="Write your announcement here..."
+                      rows={6}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
+                      maxLength={2000}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Priority
+                      </label>
+                      <select
+                        value={newAnnouncement.priority}
+                        onChange={(e) => setNewAnnouncement({...newAnnouncement, priority: e.target.value as any})}
+                        className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                      >
+                        <option value="low">Low</option>
+                        <option value="normal">Normal</option>
+                        <option value="high">High</option>
+                        <option value="urgent">Urgent</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-end">
+                      <label className="flex items-center space-x-3 pb-3">
+                        <input
+                          type="checkbox"
+                          checked={newAnnouncement.isPinned}
+                          onChange={(e) => setNewAnnouncement({...newAnnouncement, isPinned: e.target.checked})}
+                          className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                        />
+                        <span className="text-sm font-medium text-gray-700">Pin announcement</span>
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sticky button container for iOS */}
+                <div 
+                  className="flex space-x-3 mt-8 sticky bottom-0 bg-white pt-4 -mx-6 px-6 pb-6"
+                  style={{ 
+                    boxShadow: '0 -4px 6px -1px rgba(0, 0, 0, 0.05)',
+                    zIndex: 10,
+                    pointerEvents: 'auto',
+                    touchAction: 'manipulation'
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if ('vibrate' in navigator) navigator.vibrate(10)
+                      setShowEditModal(false)
+                      setEditingAnnouncement(null)
+                      setNewAnnouncement({ title: '', content: '', priority: 'normal', isPinned: false })
+                      setErrorMessage('')
+                    }}
+                    className="flex-1 px-6 py-3 text-gray-700 bg-gray-100 rounded-xl hover:bg-gray-200 transition-colors active:scale-95"
+                    style={{ 
+                      pointerEvents: 'auto', 
+                      touchAction: 'manipulation',
+                      minHeight: '56px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      if ('vibrate' in navigator) navigator.vibrate([10, 50, 10])
+                      // Dismiss keyboard on iOS
+                      if (document.activeElement && 
+                          (document.activeElement.tagName === 'INPUT' || 
+                           document.activeElement.tagName === 'TEXTAREA')) {
+                        (document.activeElement as HTMLElement).blur()
+                      }
+                      updateAnnouncement()
+                    }}
+                    disabled={!newAnnouncement.title || !newAnnouncement.content || isCreating}
+                    className="flex-1 px-6 py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2 active:scale-95"
+                    style={{ 
+                      pointerEvents: 'auto', 
+                      touchAction: 'manipulation',
+                      minHeight: '56px',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    {isCreating ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Updating...</span>
+                      </>
+                    ) : (
+                      <span>Update Announcement</span>
                     )}
                   </button>
                 </div>

@@ -44,37 +44,12 @@ function MeetTheCircle({ onBack }: MeetTheCircleProps) {
       const response = await apiCall('/api/profile/members', 'GET')
       
       if (response.success) {
+        console.log('✅ Members fetched successfully:', response.data.length)
         setMembers(response.data)
       } else {
         console.error('Failed to fetch members:', response.error)
-        // Fall back to mock data if API fails
-        const mockMembers: Member[] = [
-          {
-            _id: '1',
-            firstName: 'Sarah',
-            lastName: 'Johnson',
-            profile: {
-              bio: 'Passionate about mindfulness and women\'s empowerment. Love connecting with like-minded souls.',
-              interests: ['Yoga', 'Meditation', 'Reading', 'Hiking'],
-              profilePicture: undefined,
-              location: 'San Francisco, CA',
-              joinedDate: '2024-01-15'
-            }
-          },
-          {
-            _id: '2',
-            firstName: 'Maya',
-            lastName: 'Patel',
-            profile: {
-              bio: 'Creative soul and mother of two. Always looking for inspiration and growth opportunities.',
-              interests: ['Art', 'Creativity', 'Parenting', 'Self-Care'],
-              profilePicture: undefined,
-              location: 'Austin, TX',
-              joinedDate: '2024-01-20'
-            }
-          }
-        ]
-        setMembers(mockMembers)
+        // Don't show mock data - show empty state instead
+        setMembers([])
       }
       setLoading(false)
     } catch (error) {
