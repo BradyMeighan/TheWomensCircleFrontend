@@ -100,7 +100,7 @@ function Chat({ onBack, user }: ChatProps) {
   })
   const [replyingTo, setReplyingTo] = useState<Message | null>(null)
   const [scrollY, setScrollY] = useState(0)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -341,7 +341,7 @@ function Chat({ onBack, user }: ChatProps) {
         
         // Reset textarea height
         if (inputRef.current) {
-          (inputRef.current as HTMLTextAreaElement).style.height = '52px'
+          inputRef.current.style.height = '52px'
         }
       }
     } catch (error: any) {

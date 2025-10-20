@@ -3,7 +3,6 @@ import { motion } from 'framer-motion'
 
 interface ProfileSettingsProps {
   onBack: () => void
-  user: { username: string; email?: string; isAdmin?: boolean } | null
 }
 
 interface UserProfile {
@@ -18,7 +17,7 @@ interface UserProfile {
   }
 }
 
-function ProfileSettings({ onBack, user }: ProfileSettingsProps) {
+function ProfileSettings({ onBack }: ProfileSettingsProps) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)

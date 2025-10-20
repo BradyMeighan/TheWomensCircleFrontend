@@ -132,8 +132,7 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
       opacity: 1,
       y: 0,
       transition: {
-        duration: 0.5,
-        ease: "easeOut"
+        duration: 0.5
       }
     }
   }
@@ -148,15 +147,13 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
       boxShadow: "0 8px 20px 0 rgba(0, 0, 0, 0.15)",
       y: -2,
       transition: {
-        duration: 0.2,
-        ease: "easeOut"
+        duration: 0.2
       }
     },
     tap: { 
       scale: 0.98,
       transition: {
-        duration: 0.1,
-        ease: "easeIn"
+        duration: 0.1
       }
     }
   }

@@ -145,7 +145,7 @@ class NotificationService {
       const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || VAPID_PUBLIC_KEY
       this.subscription = await this.swRegistration.pushManager.subscribe({
         userVisibleOnly: true,
-        applicationServerKey: this.urlBase64ToUint8Array(vapidKey)
+        applicationServerKey: this.urlBase64ToUint8Array(vapidKey) as BufferSource
       })
       
       console.log('📱 New subscription created successfully:', {

@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
-    "build:production": "NODE_ENV=production tsc && vite build --mode production",
+    "build": "npx tsc && vite build",
+    "build:production": "npx tsc && vite build --mode production",
     "preview": "vite preview",
     "preview:production": "vite preview --mode production"
   },

@@ -4,7 +4,7 @@ import PWAInstallPrompt from './PWAInstallPrompt'
 import { shouldShowInstallInstructions, hasSeenInstallInstructions, markInstallInstructionsSeen } from '../utils/pwa'
 
 interface LoginProps {
-  onLogin: (user: { _id: string; username: string; email: string; isAdmin: boolean }) => void
+  onLogin: (user: { _id: string; username: string; email: string; firstName: string; lastName: string; isAdmin: boolean }) => void
   onForgotPassword: () => void
   onCreateAccount: () => void
 }
@@ -64,6 +64,8 @@ function Login({ onLogin, onForgotPassword, onCreateAccount }: LoginProps) {
             _id: response.data.user._id,
             username: response.data.user.firstName + ' ' + response.data.user.lastName,
             email: response.data.user.email,
+            firstName: response.data.user.firstName,
+            lastName: response.data.user.lastName,
             isAdmin: response.data.user.isAdmin
           }
 

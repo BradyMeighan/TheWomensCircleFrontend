@@ -263,7 +263,6 @@ function App() {
       {!showSplash && currentScreen === 'profile-settings' && (
         <ProfileSettings 
           onBack={handleBackToHome}
-          user={user}
         />
       )}
       {!showSplash && currentScreen === 'photo-gallery' && (

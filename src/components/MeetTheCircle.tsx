@@ -56,7 +56,7 @@ function MeetTheCircle({ onBack }: MeetTheCircleProps) {
             profile: {
               bio: 'Passionate about mindfulness and women\'s empowerment. Love connecting with like-minded souls.',
               interests: ['Yoga', 'Meditation', 'Reading', 'Hiking'],
-              profilePicture: null,
+              profilePicture: undefined,
               location: 'San Francisco, CA',
               joinedDate: '2024-01-15'
             }
@@ -68,7 +68,7 @@ function MeetTheCircle({ onBack }: MeetTheCircleProps) {
             profile: {
               bio: 'Creative soul and mother of two. Always looking for inspiration and growth opportunities.',
               interests: ['Art', 'Creativity', 'Parenting', 'Self-Care'],
-              profilePicture: null,
+              profilePicture: undefined,
               location: 'Austin, TX',
               joinedDate: '2024-01-20'
             }

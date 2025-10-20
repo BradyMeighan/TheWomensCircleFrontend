@@ -62,7 +62,7 @@ function Gala({ onBack, user }: GalaProps) {
   
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     initializeGalaChat()
@@ -224,7 +224,7 @@ function Gala({ onBack, user }: GalaProps) {
       
       // Reset textarea height
       if (inputRef.current) {
-        (inputRef.current as HTMLTextAreaElement).style.height = '52px'
+        inputRef.current.style.height = '52px'
       }
     } catch (error) {
       console.error('Failed to send message:', error)
