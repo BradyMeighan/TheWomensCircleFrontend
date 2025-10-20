@@ -24,14 +24,16 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const audioContextRef = useRef<AudioContext | null>(null)
   const previewAudioRef = useRef<HTMLAudioElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
-  const isInitializedRef = useRef(false) // Prevent double initialization
+  const isMountedRef = useRef(true) // Track if component is actually mounted
 
   useEffect(() => {
-    // Prevent double initialization (React 18 Strict Mode issue)
-    if (isInitializedRef.current) return
-    isInitializedRef.current = true
+    console.log('🎤 VoiceRecorder mounting...')
+    isMountedRef.current = true
     
-    startRecording()
+    // Only start if we don't have an active stream already
+    if (!streamRef.current && !mediaRecorderRef.current) {
+      startRecording()
+    }
     
     // Add event listeners to ensure cleanup on page unload/visibility change
     const handleVisibilityChange = () => {
@@ -52,9 +54,25 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
     window.addEventListener('beforeunload', handleBeforeUnload)
     
     return () => {
+      console.log('🧹 VoiceRecorder cleanup called...')
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('beforeunload', handleBeforeUnload)
-      cleanup()
+      
+      // Only cleanup on actual unmount (not React Strict Mode)
+      isMountedRef.current = false
+      
+      // Defer cleanup to check if remounting
+      const timeoutId = setTimeout(() => {
+        if (!isMountedRef.current) {
+          console.log('🛑 Component actually unmounted, cleaning up...')
+          cleanup()
+        } else {
+          console.log('✅ Component remounted, skipping cleanup')
+        }
+      }, 100) // 100ms delay to allow remount
+      
+      // Cleanup the timeout if component remounts
+      return () => clearTimeout(timeoutId)
     }
   }, [])
 
@@ -178,13 +196,15 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const startRecording = async () => {
     // Prevent multiple simultaneous recordings
     if (streamRef.current || mediaRecorderRef.current) {
-      console.warn('⚠️ Recording already in progress, skipping...')
+      console.warn('⚠️ Already recording, skipping...')
       return
     }
-
+    
     try {
       console.log('🎤 Starting recording...')
       setError(null)
+      setDuration(0) // Reset duration
+      setDebugInfo('Requesting microphone access...')
       
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -197,6 +217,7 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       // Store stream reference for cleanup
       streamRef.current = stream
       console.log('✅ Got media stream with', stream.getTracks().length, 'tracks')
+      setDebugInfo(`Got stream with ${stream.getTracks().length} tracks`)
 
       // Set up audio context and analyser for visualization
       audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
@@ -297,9 +318,6 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
   const stopRecording = () => {
     console.log('⏸️ Stopping recording...')
     
-    // iOS: Stop tracks IMMEDIATELY in user interaction context
-    forceStopAllTracks()
-    
     // Stop timers and animation
     if (timerIntervalRef.current) {
       clearInterval(timerIntervalRef.current)
@@ -310,15 +328,25 @@ export default function VoiceRecorder({ onSend, onCancel }: VoiceRecorderProps) 
       animationFrameRef.current = null
     }
     
+    // Stop microphone tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => {
+        track.stop()
+        console.log('🎤 Microphone track stopped')
+      })
+    }
+    
     // Stop the media recorder
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       try {
         mediaRecorderRef.current.stop()
+        console.log('🛑 MediaRecorder stopped')
       } catch (err) {
         console.error('Error stopping recorder:', err)
       }
-      setIsRecording(false)
     }
+    
+    setIsRecording(false)
   }
 
   const togglePreview = async () => {

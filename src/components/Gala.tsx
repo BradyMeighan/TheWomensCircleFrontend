@@ -730,8 +730,8 @@ function Gala({ onBack, user }: GalaProps) {
                     </div>
                   )}
                   
-                  <div className={`backdrop-blur-sm shadow-sm rounded-2xl ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] ${
-                    user && message.author._id === user._id 
+                  <div className={`${message.type === 'voice' ? '' : 'backdrop-blur-sm shadow-sm rounded-2xl'} ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] ${
+                    message.type === 'voice' ? '' : user && message.author._id === user._id 
                       ? 'bg-pink-100/95' 
                       : 'bg-white/90'
                   }`}>
@@ -799,7 +799,6 @@ function Gala({ onBack, user }: GalaProps) {
                                   key={`${message._id}-${carouselIndexes[message._id] || 0}`}
                                   src={message.attachments[carouselIndexes[message._id] || 0].url} 
                                   alt={`Image ${(carouselIndexes[message._id] || 0) + 1}`}
-                                  loading="lazy"
                                   className="max-w-full max-h-96 w-full h-full object-contain cursor-pointer select-none"
                                   initial={{ opacity: 0 }}
                                   animate={{ opacity: 1 }}
@@ -944,12 +943,10 @@ function Gala({ onBack, user }: GalaProps) {
                     )}
                     {/* Voice message */}
                     {message.type === 'voice' && message.attachments && message.attachments.length > 0 && (
-                      <div className="p-2">
-                        <AudioPlayer 
-                          audioUrl={message.attachments[0].url} 
-                          duration={message.attachments[0].duration}
-                        />
-                      </div>
+                      <AudioPlayer 
+                        audioUrl={message.attachments[0].url} 
+                        duration={message.attachments[0].duration}
+                      />
                     )}
                     {/* Regular text message */}
                     {message.type !== 'image' && message.type !== 'voice' && (

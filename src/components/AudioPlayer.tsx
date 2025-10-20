@@ -20,8 +20,13 @@ export default function AudioPlayer({ audioUrl, duration: providedDuration }: Au
 
   useEffect(() => {
     // Create audio element
-    const audio = new Audio(audioUrl)
+    const audio = new Audio()
+    audio.crossOrigin = 'anonymous' // Enable CORS for audio
+    audio.preload = 'metadata' // Don't preload full audio
     audioRef.current = audio
+
+    // Set source after audio element is created
+    audio.src = audioUrl
 
     audio.addEventListener('loadedmetadata', () => {
       if (!providedDuration) {
@@ -37,6 +42,14 @@ export default function AudioPlayer({ audioUrl, duration: providedDuration }: Au
       setIsPlaying(false)
       setCurrentTime(0)
     })
+
+    audio.addEventListener('error', (e) => {
+      console.error('Audio loading error:', e)
+      console.error('Audio URL:', audioUrl)
+    })
+
+    // Load the audio
+    audio.load()
 
     return () => {
       if (animationFrameRef.current) {
@@ -105,12 +118,17 @@ export default function AudioPlayer({ audioUrl, duration: providedDuration }: Au
         cancelAnimationFrame(animationFrameRef.current)
       }
     } else {
-      // Setup analyser on first play
-      if (!sourceRef.current) {
-        setupAnalyser()
-      }
-      
       try {
+        // Resume audio context if suspended (Chrome requirement)
+        if (audioContextRef.current?.state === 'suspended') {
+          await audioContextRef.current.resume()
+        }
+        
+        // Setup analyser on first play
+        if (!sourceRef.current) {
+          setupAnalyser()
+        }
+        
         await audioRef.current.play()
         setIsPlaying(true)
         visualize()
