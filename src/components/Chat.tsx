@@ -29,6 +29,24 @@ const linkifyText = (text: string) => {
   })
 }
 
+const highlightMentions = (text: string) => {
+  const mentionRegex = /@([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g
+  const parts = text.split(mentionRegex)
+  
+  return parts.map((part, index) => {
+    // If this part was captured by the regex (odd indices), it's a mention
+    if (index % 2 === 1) {
+      return (
+        <span key={index} className="bg-pink-100 text-pink-800 px-1 py-0.5 rounded font-medium">
+          @{part}
+        </span>
+      )
+    }
+    // Apply linkify to non-mention parts
+    return <span key={index}>{linkifyText(part)}</span>
+  })
+}
+
 interface ChatProps {
   onBack: () => void
   user: { _id: string; username: string; email?: string; firstName?: string; lastName?: string; isAdmin?: boolean } | null
@@ -107,6 +125,14 @@ function Chat({ onBack, user }: ChatProps) {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [editedContent, setEditedContent] = useState('')
   const [showChannelEditModal, setShowChannelEditModal] = useState<Channel | null>(null)
+  
+  // Mention autocomplete state
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([])
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const [mentionStartPos, setMentionStartPos] = useState(0)
+  const [channelMembers, setChannelMembers] = useState<any[]>([])
   const [editChannelData, setEditChannelData] = useState({
     sortOrder: 0
   })
@@ -245,6 +271,25 @@ function Chat({ onBack, user }: ChatProps) {
     }
   }, [messages.length])
 
+  // Fetch channel members when channel is selected
+  useEffect(() => {
+    if (selectedChannel) {
+      fetchChannelMembers(selectedChannel._id)
+    }
+  }, [selectedChannel])
+
+  // Add keyboard event listener for mention navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      handleMentionKeyDown(e)
+    }
+
+    if (showMentionDropdown) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showMentionDropdown, mentionSuggestions, selectedMentionIndex])
+
   const fetchChannels = async () => {
     try {
       const response = await apiCall('/api/chat/channels', 'GET')
@@ -323,6 +368,121 @@ function Chat({ onBack, user }: ChatProps) {
     fetchMessages(selectedChannel._id, currentPage + 1, true).finally(() => {
       setLoadingMore(false)
     })
+  }
+
+  // Fetch channel members for mention autocomplete
+  const fetchChannelMembers = async (channelId: string) => {
+    try {
+      const response = await apiCall(`/api/chat/channels/${channelId}/members`, 'GET')
+      if (response.success && response.data && response.data.length > 0) {
+        setChannelMembers(response.data)
+      } else {
+        // Fallback: fetch all users for general channels
+        try {
+          const allUsersResponse = await apiCall('/api/user/all', 'GET')
+          if (allUsersResponse.success && allUsersResponse.data) {
+            setChannelMembers(allUsersResponse.data)
+          }
+        } catch (fallbackError) {
+          console.error('Error fetching all users fallback:', fallbackError)
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching channel members:', error)
+      // Try fallback even on error
+      try {
+        const allUsersResponse = await apiCall('/api/user/all', 'GET')
+        if (allUsersResponse.success && allUsersResponse.data) {
+          setChannelMembers(allUsersResponse.data)
+        }
+      } catch (fallbackError) {
+        console.error('Fallback also failed:', fallbackError)
+      }
+    }
+  }
+
+  // Handle mention autocomplete
+  const handleInputChange = (value: string, cursorPos?: number) => {
+    setNewMessage(value)
+    
+    if (!inputRef.current) return
+    
+    const cursor = cursorPos !== undefined ? cursorPos : inputRef.current.selectionStart || 0
+    const textBeforeCursor = value.substring(0, cursor)
+    const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/)
+    
+    if (mentionMatch) {
+      const query = mentionMatch[1].toLowerCase()
+      const startPos = cursor - mentionMatch[0].length
+      
+      setMentionStartPos(startPos)
+      setMentionQuery(query)
+      setShowMentionDropdown(true)
+      setSelectedMentionIndex(0)
+      
+      // Filter members based on query
+      const filtered = channelMembers.filter(member => 
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(query) ||
+        member.firstName.toLowerCase().startsWith(query) ||
+        member.lastName.toLowerCase().startsWith(query)
+      )
+      
+      setMentionSuggestions(filtered.slice(0, 10)) // Limit to 10 suggestions
+    } else {
+      setShowMentionDropdown(false)
+      setMentionQuery('')
+      setMentionSuggestions([])
+    }
+  }
+
+  // Insert mention into message
+  const insertMention = (member: any) => {
+    const mentionText = `@${member.firstName} ${member.lastName}`
+    const beforeMention = newMessage.substring(0, mentionStartPos)
+    const afterMention = newMessage.substring(mentionStartPos + mentionQuery.length + 1) // +1 for @
+    const newText = beforeMention + mentionText + ' ' + afterMention
+    
+    setNewMessage(newText)
+    setShowMentionDropdown(false)
+    setMentionQuery('')
+    setMentionSuggestions([])
+    
+    // Focus back to input and set cursor position
+    if (inputRef.current) {
+      const newCursorPos = mentionStartPos + mentionText.length + 1
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
+        }
+      }, 0)
+    }
+  }
+
+  // Handle keyboard navigation in mention dropdown
+  const handleMentionKeyDown = (e: KeyboardEvent) => {
+    if (!showMentionDropdown) return
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedMentionIndex(prev => 
+        prev < mentionSuggestions.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedMentionIndex(prev => 
+        prev > 0 ? prev - 1 : mentionSuggestions.length - 1
+      )
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      if (mentionSuggestions[selectedMentionIndex]) {
+        insertMention(mentionSuggestions[selectedMentionIndex])
+      }
+    } else if (e.key === 'Escape') {
+      setShowMentionDropdown(false)
+      setMentionQuery('')
+      setMentionSuggestions([])
+    }
   }
 
   const sendMessage = async () => {
@@ -1579,7 +1739,7 @@ function Chat({ onBack, user }: ChatProps) {
                       {formatTime(message.createdAt)}
                     </span>
                         </div>
-                        <div className={`${message.type === 'voice' ? '' : 'shadow-sm rounded-2xl'} ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] ${
+                        <div className={`${message.type === 'voice' ? '' : 'shadow-sm rounded-2xl'} ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] break-words overflow-wrap-anywhere ${
                           message.type === 'voice' ? '' : user && message.author._id === user._id 
                             ? 'bg-pink-100' 
                             : 'bg-white'
@@ -1831,7 +1991,7 @@ function Chat({ onBack, user }: ChatProps) {
                           // Normal display mode
                           <div>
                             <p className="text-sm break-words leading-relaxed text-gray-800 whitespace-pre-wrap">
-                              {linkifyText(message.content)}
+                              {highlightMentions(message.content)}
                             </p>
                             {message.edited && (
                               <span className="text-xs text-gray-500 italic ml-2">(edited)</span>
@@ -1864,11 +2024,11 @@ function Chat({ onBack, user }: ChatProps) {
 
                       {/* Reply Indicator */}
                       {message.parentMessage && (
-                        <div className="mb-2 pl-3 border-l-2 border-gray-300 text-xs text-gray-600 bg-gray-50 rounded p-2">
-                          <span className="font-medium">
-                            Replying to {message.parentMessage.author?.firstName || 'Unknown'} {message.parentMessage.author?.lastName || 'User'}:
+                        <div className="mb-2 pl-3 border-l-2 border-gray-300 text-xs text-gray-600 bg-gray-50 rounded p-2 max-w-full overflow-hidden">
+                          <span className="font-medium break-words">
+                            Replying to {message.parentMessage.author?.firstName || 'Unknown'} {message.parentMessage.author?.lastName || ''}:
                           </span>
-                          <p className="truncate mt-1">{message.parentMessage.content}</p>
+                          <p className="mt-1 break-words overflow-wrap-anywhere">{message.parentMessage.content}</p>
                         </div>
                       )}
 
@@ -1963,10 +2123,10 @@ function Chat({ onBack, user }: ChatProps) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                       </svg>
                       <span className="text-pink-700 font-medium truncate">
-                        Replying to {replyingTo.author?.firstName || 'Unknown'} {replyingTo.author?.lastName || 'User'}
+                        Replying to {replyingTo.author?.firstName || 'Unknown'} {replyingTo.author?.lastName || ''}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 mt-1 truncate pl-6">{replyingTo.content}</p>
+                    <p className="text-sm text-gray-600 mt-1 pl-6 break-words overflow-wrap-anywhere">{replyingTo.content}</p>
                   </div>
                   <button
                     onClick={() => setReplyingTo(null)}
@@ -1985,8 +2145,13 @@ function Chat({ onBack, user }: ChatProps) {
                   <textarea
                     ref={inputRef as any}
                     value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
+                    onChange={(e) => handleInputChange(e.target.value)}
                     onKeyDown={(e) => {
+                      // Don't handle Enter if mention dropdown is open
+                      if (showMentionDropdown && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape')) {
+                        return // Let the mention handler deal with it
+                      }
+                      
                       if (e.key === 'Enter' && !e.shiftKey) {
                         e.preventDefault()
                         sendMessage()
@@ -2004,6 +2169,39 @@ function Chat({ onBack, user }: ChatProps) {
                     rows={1}
                     style={{ height: '52px' }}
                   />
+                  
+                  {/* Mention Autocomplete Dropdown */}
+                  {showMentionDropdown && mentionSuggestions.length > 0 && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50">
+                      {mentionSuggestions.map((member, index) => (
+                        <div
+                          key={member._id}
+                          className={`flex items-center space-x-3 px-4 py-2 cursor-pointer hover:bg-gray-50 ${
+                            index === selectedMentionIndex ? 'bg-pink-50 border-l-2 border-pink-500' : ''
+                          }`}
+                          onClick={() => insertMention(member)}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                            {member.profile?.profilePicture ? (
+                              <img 
+                                src={member.profile.profilePicture} 
+                                alt={`${member.firstName} ${member.lastName}`}
+                                className="w-8 h-8 rounded-full object-cover"
+                              />
+                            ) : (
+                              `${member.firstName?.[0] || ''}${member.lastName?.[0] || ''}`
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-medium text-gray-900">
+                              {member.firstName} {member.lastName}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
                   {/* Voice message button */}
                   <button 
                     onClick={() => setShowVoiceRecorder(true)}

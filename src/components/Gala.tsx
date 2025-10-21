@@ -28,6 +28,24 @@ const linkifyText = (text: string) => {
   })
 }
 
+const highlightMentions = (text: string) => {
+  const mentionRegex = /@([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)/g
+  const parts = text.split(mentionRegex)
+  
+  return parts.map((part, index) => {
+    // If this part was captured by the regex (odd indices), it's a mention
+    if (index % 2 === 1) {
+      return (
+        <span key={index} className="bg-purple-100 text-purple-800 px-1 py-0.5 rounded font-medium">
+          @{part}
+        </span>
+      )
+    }
+    // Apply linkify to non-mention parts
+    return <span key={index}>{linkifyText(part)}</span>
+  })
+}
+
 interface GalaProps {
   onBack: () => void
   user: { _id: string; username: string; email: string; firstName: string; lastName: string; isAdmin: boolean; profile?: { profilePicture?: string } } | null
@@ -88,6 +106,14 @@ function Gala({ onBack, user }: GalaProps) {
   const [editingMessage, setEditingMessage] = useState<Message | null>(null)
   const [editedContent, setEditedContent] = useState('')
   
+  // Mention autocomplete state
+  const [showMentionDropdown, setShowMentionDropdown] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+  const [mentionSuggestions, setMentionSuggestions] = useState<any[]>([])
+  const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
+  const [mentionStartPos, setMentionStartPos] = useState(0)
+  const [channelMembers, setChannelMembers] = useState<any[]>([])
+  
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -119,10 +145,146 @@ function Gala({ onBack, user }: GalaProps) {
     }
   }, [messages.length, loadingMore])
 
+  // Fetch channel members when channel ID is available
+  useEffect(() => {
+    if (channelId) {
+      fetchChannelMembers(channelId)
+    }
+  }, [channelId])
+
+  // Add keyboard event listener for mention navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      handleMentionKeyDown(e)
+    }
+
+    if (showMentionDropdown) {
+      document.addEventListener('keydown', handleKeyDown)
+      return () => document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [showMentionDropdown, mentionSuggestions, selectedMentionIndex])
+
   // Load more messages via button click (removed auto-scroll)
   const handleLoadMore = () => {
     if (!loadingMore && hasMoreMessages) {
       loadMoreMessages()
+    }
+  }
+
+  // Fetch channel members for mention autocomplete
+  const fetchChannelMembers = async (channelId: string) => {
+    try {
+      const api = await import('../config/api')
+      const apiCall = api.apiCall
+      const response = await apiCall(`/api/chat/channels/${channelId}/members`, 'GET')
+      if (response.success && response.data && response.data.length > 0) {
+        setChannelMembers(response.data)
+      } else {
+        // Fallback: fetch all users for general channels
+        try {
+          const allUsersResponse = await apiCall('/api/user/all', 'GET')
+          if (allUsersResponse.success && allUsersResponse.data) {
+            setChannelMembers(allUsersResponse.data)
+          }
+        } catch (fallbackError) {
+          console.error('Gala: Error fetching all users fallback:', fallbackError)
+        }
+      }
+    } catch (error) {
+      console.error('Gala: Error fetching channel members:', error)
+      // Try fallback even on error
+      try {
+        const allUsersResponse = await apiCall('/api/user/all', 'GET')
+        if (allUsersResponse.success && allUsersResponse.data) {
+          setChannelMembers(allUsersResponse.data)
+        }
+      } catch (fallbackError) {
+        console.error('Gala: Fallback also failed:', fallbackError)
+      }
+    }
+  }
+
+  // Handle mention autocomplete
+  const handleInputChange = (value: string, cursorPos?: number) => {
+    setNewMessage(value)
+    
+    if (!inputRef.current) return
+    
+    const cursor = cursorPos !== undefined ? cursorPos : inputRef.current.selectionStart || 0
+    const textBeforeCursor = value.substring(0, cursor)
+    const mentionMatch = textBeforeCursor.match(/@([a-zA-Z0-9_]*)$/)
+    
+    if (mentionMatch) {
+      const query = mentionMatch[1].toLowerCase()
+      const startPos = cursor - mentionMatch[0].length
+      
+      setMentionStartPos(startPos)
+      setMentionQuery(query)
+      setShowMentionDropdown(true)
+      setSelectedMentionIndex(0)
+      
+      // Filter members based on query
+      const filtered = channelMembers.filter(member => 
+        `${member.firstName} ${member.lastName}`.toLowerCase().includes(query) ||
+        member.firstName.toLowerCase().startsWith(query) ||
+        member.lastName.toLowerCase().startsWith(query)
+      )
+      
+      setMentionSuggestions(filtered.slice(0, 10)) // Limit to 10 suggestions
+    } else {
+      setShowMentionDropdown(false)
+      setMentionQuery('')
+      setMentionSuggestions([])
+    }
+  }
+
+  // Insert mention into message
+  const insertMention = (member: any) => {
+    const mentionText = `@${member.firstName} ${member.lastName}`
+    const beforeMention = newMessage.substring(0, mentionStartPos)
+    const afterMention = newMessage.substring(mentionStartPos + mentionQuery.length + 1) // +1 for @
+    const newText = beforeMention + mentionText + ' ' + afterMention
+    
+    setNewMessage(newText)
+    setShowMentionDropdown(false)
+    setMentionQuery('')
+    setMentionSuggestions([])
+    
+    // Focus back to input and set cursor position
+    if (inputRef.current) {
+      const newCursorPos = mentionStartPos + mentionText.length + 1
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+          inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
+        }
+      }, 0)
+    }
+  }
+
+  // Handle keyboard navigation in mention dropdown
+  const handleMentionKeyDown = (e: KeyboardEvent) => {
+    if (!showMentionDropdown) return
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      setSelectedMentionIndex(prev => 
+        prev < mentionSuggestions.length - 1 ? prev + 1 : 0
+      )
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      setSelectedMentionIndex(prev => 
+        prev > 0 ? prev - 1 : mentionSuggestions.length - 1
+      )
+    } else if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault()
+      if (mentionSuggestions[selectedMentionIndex]) {
+        insertMention(mentionSuggestions[selectedMentionIndex])
+      }
+    } else if (e.key === 'Escape') {
+      setShowMentionDropdown(false)
+      setMentionQuery('')
+      setMentionSuggestions([])
     }
   }
 
@@ -133,7 +295,7 @@ function Gala({ onBack, user }: GalaProps) {
       const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://thewomenscirclebackend-production.up.railway.app'
       
       // Fetch initial messages
-      const response = await apiCall(`/api/chat/gala-messages?page=1&limit=100`)
+      const response = await apiCall(`/api/chat/gala-messages?page=1&limit=20`)
       if (response.success) {
         setMessages(response.data.messages)
         setHasMoreMessages(response.data.hasMore)
@@ -209,7 +371,7 @@ function Gala({ onBack, user }: GalaProps) {
       const { apiCall } = await import('../config/api')
       const nextPage = currentPage + 1
       
-      const response = await apiCall(`/api/chat/gala-messages?page=${nextPage}&limit=100`)
+      const response = await apiCall(`/api/chat/gala-messages?page=${nextPage}&limit=20`)
       if (response.success) {
         setMessages(prev => [...response.data.messages, ...prev])
         setHasMoreMessages(response.data.hasMore)
@@ -806,15 +968,15 @@ function Gala({ onBack, user }: GalaProps) {
                   </div>
                   {/* Reply Indicator */}
                   {message.parentMessage && (
-                    <div className="mb-2 pl-3 border-l-2 border-purple-300 text-xs text-gray-600 bg-white/60 backdrop-blur-sm rounded p-2">
-                      <span className="font-medium">
-                        Replying to {message.parentMessage.author?.firstName || 'Unknown'} {message.parentMessage.author?.lastName || 'User'}:
+                    <div className="mb-2 pl-3 border-l-2 border-purple-300 text-xs text-gray-600 bg-white/60 backdrop-blur-sm rounded p-2 max-w-full overflow-hidden">
+                      <span className="font-medium break-words">
+                        Replying to {message.parentMessage.author?.firstName || 'Unknown'} {message.parentMessage.author?.lastName || ''}:
                       </span>
-                      <p className="truncate mt-1">{message.parentMessage.content}</p>
+                      <p className="mt-1 break-words overflow-wrap-anywhere">{message.parentMessage.content}</p>
                     </div>
                   )}
                   
-                  <div className={`${message.type === 'voice' ? '' : 'backdrop-blur-sm shadow-sm rounded-2xl'} ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] ${
+                  <div className={`${message.type === 'voice' ? '' : 'backdrop-blur-sm shadow-sm rounded-2xl'} ${message.type === 'image' || message.type === 'voice' ? 'p-1' : 'px-3 py-2'} inline-block max-w-[85%] break-words overflow-wrap-anywhere ${
                     message.type === 'voice' ? '' : user && message.author._id === user._id 
                       ? 'bg-pink-100/95' 
                       : 'bg-white/90'
@@ -1023,7 +1185,7 @@ function Gala({ onBack, user }: GalaProps) {
                         )}
                         
                         {message.content !== 'Image' && !message.content.includes('images') && (
-                          <p className="text-sm text-gray-800 mt-2 px-2 pb-1 whitespace-pre-wrap">{linkifyText(message.content)}</p>
+                          <p className="text-sm text-gray-800 mt-2 px-2 pb-1 whitespace-pre-wrap">{highlightMentions(message.content)}</p>
                         )}
                       </div>
                     )}
@@ -1066,7 +1228,7 @@ function Gala({ onBack, user }: GalaProps) {
                           // Normal display mode
                           <div>
                             <p className="text-sm break-words leading-relaxed text-gray-800 whitespace-pre-wrap">
-                              {linkifyText(message.content)}
+                              {highlightMentions(message.content)}
                             </p>
                             {message.edited && (
                               <span className="text-xs text-gray-500 italic ml-2">(edited)</span>
@@ -1169,7 +1331,7 @@ function Gala({ onBack, user }: GalaProps) {
                   Replying to {replyingTo.author?.firstName || 'Unknown'} {replyingTo.author?.lastName || 'User'}
                 </span>
               </div>
-              <p className="text-sm text-gray-600 mt-1 truncate pl-6">{replyingTo.content}</p>
+              <p className="text-sm text-gray-600 mt-1 pl-6 break-words overflow-wrap-anywhere">{replyingTo.content}</p>
             </div>
             <button
               onClick={() => setReplyingTo(null)}
@@ -1188,8 +1350,13 @@ function Gala({ onBack, user }: GalaProps) {
             <textarea
               ref={inputRef as any}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => handleInputChange(e.target.value)}
               onKeyDown={(e) => {
+                // Don't handle Enter if mention dropdown is open
+                if (showMentionDropdown && (e.key === 'Enter' || e.key === 'Tab' || e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'Escape')) {
+                  return // Let the mention handler deal with it
+                }
+                
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault()
                   sendMessage()
@@ -1207,6 +1374,39 @@ function Gala({ onBack, user }: GalaProps) {
               rows={1}
               style={{ height: '52px' }}
             />
+            
+            {/* Mention Autocomplete Dropdown */}
+            {showMentionDropdown && mentionSuggestions.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto z-50">
+                {mentionSuggestions.map((member, index) => (
+                  <div
+                    key={member._id}
+                    className={`flex items-center space-x-3 px-4 py-2 cursor-pointer hover:bg-gray-50 ${
+                      index === selectedMentionIndex ? 'bg-purple-50 border-l-2 border-purple-500' : ''
+                    }`}
+                    onClick={() => insertMention(member)}
+                  >
+                    <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-purple-500 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                      {member.profile?.profilePicture ? (
+                        <img 
+                          src={member.profile.profilePicture} 
+                          alt={`${member.firstName} ${member.lastName}`}
+                          className="w-8 h-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        `${member.firstName?.[0] || ''}${member.lastName?.[0] || ''}`
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-medium text-gray-900">
+                        {member.firstName} {member.lastName}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
             {/* Voice message button */}
             <button 
               onClick={() => setShowVoiceRecorder(true)}

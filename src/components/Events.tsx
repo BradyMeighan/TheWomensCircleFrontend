@@ -351,6 +351,12 @@ function Events({ onBack, user }: EventsProps) {
       
       if (response.success) {
         console.log('✅ Event updated successfully')
+        console.log('📅 Updated event data received:', {
+          id: response.data._id,
+          title: response.data.title,
+          eventDate: response.data.eventDate,
+          eventTime: response.data.eventTime
+        })
         
         setEvents(events.map(e => e._id === editingEvent._id ? response.data : e))
         if (selectedEvent?._id === editingEvent._id) {
@@ -509,7 +515,13 @@ function Events({ onBack, user }: EventsProps) {
   }
 
   const formatEventDate = (dateStr: string) => {
-    const date = new Date(dateStr)
+    // Extract just the date part to avoid timezone conversion issues
+    const datePart = dateStr.split('T')[0] // Gets "2025-10-29" from "2025-10-29T00:00:00.000Z"
+    const [year, month, day] = datePart.split('-').map(Number)
+    
+    // Create date in local timezone to avoid UTC conversion
+    const date = new Date(year, month - 1, day) // month is 0-indexed
+    
     return date.toLocaleDateString('en-US', {
       weekday: 'long',
       year: 'numeric',
@@ -529,8 +541,8 @@ function Events({ onBack, user }: EventsProps) {
 
   // Helper function to format date for the calendar component
   const formatDateForCalendar = (dateStr: string) => {
-    const date = new Date(dateStr)
-    return date.toISOString().split('T')[0] // Returns YYYY-MM-DD format
+    // Extract just the date part to avoid timezone conversion
+    return dateStr.split('T')[0] // Returns YYYY-MM-DD format directly
   }
 
   // Helper function to format time for the calendar component
