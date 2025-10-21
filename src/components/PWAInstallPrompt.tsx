@@ -1,5 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion'
 import { isIOS, isAndroid, getIOSVersion } from '../utils/pwa'
+import { useEffect } from 'react'
 
 interface PWAInstallPromptProps {
   onDismiss: () => void
@@ -10,6 +11,32 @@ function PWAInstallPrompt({ onDismiss }: PWAInstallPromptProps) {
   const isAndroidDevice = isAndroid()
   const iosVersion = getIOSVersion()
   const isIOS18OrLater = iosVersion && iosVersion >= 18
+
+  // Auto-dismiss after 30 seconds to prevent getting stuck
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      onDismiss()
+    }, 30000)
+
+    return () => clearTimeout(timer)
+  }, [onDismiss])
+
+  // Handle touch events for better mobile responsiveness
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.stopPropagation()
+  }
+
+  const handleBackdropTouch = (e: React.TouchEvent) => {
+    if (e.target === e.currentTarget) {
+      onDismiss()
+    }
+  }
+
+  const handleBackdropClick = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) {
+      onDismiss()
+    }
+  }
 
   if (!isIOSDevice && !isAndroidDevice) {
     return null
@@ -22,7 +49,9 @@ function PWAInstallPrompt({ onDismiss }: PWAInstallPromptProps) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         className="fixed inset-0 bg-black bg-opacity-75 z-50 flex items-center justify-center p-4"
-        onClick={onDismiss}
+        onClick={handleBackdropClick}
+        onTouchStart={handleBackdropTouch}
+        style={{ touchAction: 'manipulation' }}
       >
         <motion.div
           initial={{ scale: 0.9, opacity: 0 }}
@@ -30,12 +59,18 @@ function PWAInstallPrompt({ onDismiss }: PWAInstallPromptProps) {
           exit={{ scale: 0.9, opacity: 0 }}
           className="bg-white rounded-3xl max-w-md w-full p-6 relative"
           onClick={(e) => e.stopPropagation()}
+          onTouchStart={handleTouchStart}
         >
-          {/* Close button */}
+          {/* Close button - larger touch target for mobile */}
           <button
             onClick={onDismiss}
-            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+            onTouchStart={(e) => {
+              e.stopPropagation()
+              onDismiss()
+            }}
+            className="absolute top-2 right-2 p-2 text-gray-400 hover:text-gray-600 transition-colors touch-manipulation"
             aria-label="Close"
+            style={{ touchAction: 'manipulation', minWidth: '44px', minHeight: '44px' }}
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -177,15 +212,34 @@ function PWAInstallPrompt({ onDismiss }: PWAInstallPromptProps) {
           )}
 
           {/* Action buttons */}
-          <div className="mt-6 space-y-2">
+          <div className="mt-6 space-y-3">
             <button
               onClick={onDismiss}
-              className="w-full bg-gray-900 text-white py-3 px-4 rounded-xl font-medium hover:bg-gray-800 transition-all"
+              onTouchStart={(e) => {
+                e.stopPropagation()
+                onDismiss()
+              }}
+              className="w-full bg-gray-900 text-white py-3 px-4 rounded-xl font-medium hover:bg-gray-800 transition-all touch-manipulation"
+              style={{ touchAction: 'manipulation', minHeight: '44px' }}
             >
               Got it!
             </button>
+            
+            <button
+              onClick={onDismiss}
+              onTouchStart={(e) => {
+                e.stopPropagation()
+                onDismiss()
+              }}
+              className="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-xl font-medium hover:bg-gray-300 transition-all touch-manipulation"
+              style={{ touchAction: 'manipulation', minHeight: '44px' }}
+            >
+              Skip for now
+            </button>
+            
             <p className="text-xs text-gray-500 text-center">
-              You can always install the app later from your browser menu
+              Installing the app gives you a better experience and works offline.<br/>
+              You can always install later from your browser menu.
             </p>
           </div>
         </motion.div>

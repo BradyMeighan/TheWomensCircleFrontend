@@ -312,24 +312,54 @@ function MeetTheCircle({ onBack }: MeetTheCircleProps) {
                   </svg>
                 </motion.button>
 
-                {/* Dots indicator */}
-                <div className="flex space-x-2">
-                  {members.map((_, index) => (
-                    <motion.button
-                      key={index}
-                      onClick={() => handleDotClick(index)}
-                      className={`w-3 h-3 rounded-full transition-colors ${
-                        index === currentIndex ? 'bg-gray-800' : 'bg-gray-300'
-                      }`}
-                      whileHover={{ scale: 1.2 }}
-                      whileTap={{ scale: 0.9 }}
-                      animate={{ 
-                        scale: index === currentIndex ? 1.2 : 1,
-                        backgroundColor: index === currentIndex ? "#1f2937" : "#d1d5db"
-                      }}
-                      transition={{ duration: 0.2 }}
-                    />
-                  ))}
+                {/* Dots indicator - limit to max 10 dots */}
+                <div className="flex space-x-2 max-w-xs overflow-hidden">
+                  {members.length <= 10 ? (
+                    // Show all dots if 10 or fewer members
+                    members.map((_, index) => (
+                      <motion.button
+                        key={index}
+                        onClick={() => handleDotClick(index)}
+                        className={`w-3 h-3 rounded-full transition-colors flex-shrink-0 dot-button ${
+                          index === currentIndex ? 'bg-gray-800' : 'bg-gray-300'
+                        }`}
+                        whileHover={{ scale: 1.2 }}
+                        whileTap={{ scale: 0.9 }}
+                        animate={{ 
+                          scale: index === currentIndex ? 1.2 : 1,
+                          backgroundColor: index === currentIndex ? "#1f2937" : "#d1d5db"
+                        }}
+                        transition={{ duration: 0.2 }}
+                      />
+                    ))
+                  ) : (
+                    // Show page indicator for many members
+                    <div className="flex items-center space-x-2">
+                      <span className="text-sm text-gray-600 font-medium">
+                        {currentIndex + 1} of {members.length}
+                      </span>
+                      <div className="flex space-x-1">
+                        {[...Array(Math.min(5, Math.ceil(members.length / 5)))].map((_, pageIndex) => {
+                          const isCurrentPage = Math.floor(currentIndex / 5) === pageIndex
+                          return (
+                            <motion.button
+                              key={pageIndex}
+                              onClick={() => handleDotClick(pageIndex * 5)}
+                              className={`w-2 h-2 rounded-full transition-colors flex-shrink-0 dot-button ${
+                                isCurrentPage ? 'bg-gray-800' : 'bg-gray-300'
+                              }`}
+                              whileHover={{ scale: 1.3 }}
+                              whileTap={{ scale: 0.8 }}
+                              animate={{ 
+                                backgroundColor: isCurrentPage ? "#1f2937" : "#d1d5db"
+                              }}
+                              transition={{ duration: 0.2 }}
+                            />
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <motion.button

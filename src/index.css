@@ -117,3 +117,219 @@ html, body {
   transform: scale(0.95);
 }
 
+/* Enhanced mobile touch handling */
+.touch-manipulation {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Prevent double-tap zoom on buttons and interactive elements */
+button, 
+.button, 
+[role="button"],
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  touch-action: manipulation;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+/* Apply minimum touch target size only to specific button types */
+.primary-button,
+.action-button,
+.nav-button,
+button.w-full,
+button[type="submit"] {
+  min-height: 44px;
+}
+
+/* Smaller buttons for UI elements like emoji reactions, dots, etc. */
+.small-button,
+.emoji-button,
+.reaction-button,
+.dot-button {
+  min-height: 32px;
+  min-width: 32px;
+}
+
+/* Fix text input issues on mobile */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+textarea {
+  /* Prevent zoom on focus */
+  font-size: 16px !important;
+  /* Fix keyboard issues */
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  /* Prevent callouts on long press */
+  -webkit-touch-callout: none;
+  /* Better touch handling */
+  touch-action: manipulation;
+}
+
+/* Fix for iOS Safari input focus issues */
+@supports (-webkit-touch-callout: none) {
+  input, textarea {
+    /* Force keyboard to show properly */
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  
+  /* Prevent the paste menu issue */
+  input:focus, textarea:focus {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+}
+
+/* Prevent text selection on UI elements that shouldn't be selectable */
+.no-select {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
+  user-select: none;
+}
+
+/* Fix for modal/overlay touch issues */
+.modal-overlay {
+  touch-action: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Improve button responsiveness */
+button:active,
+.button:active,
+[role="button"]:active {
+  transform: scale(0.95);
+  transition: transform 0.1s ease;
+}
+
+/* Fix scroll behavior on mobile */
+.scroll-container {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Prevent horizontal scroll issues */
+* {
+  box-sizing: border-box;
+}
+
+/* Fix viewport issues on mobile browsers */
+@viewport {
+  width: device-width;
+  zoom: 1.0;
+}
+
+/* Additional iOS-specific fixes */
+@supports (-webkit-touch-callout: none) {
+  /* Fix for iOS Safari address bar height changes */
+  .full-height-mobile {
+    height: 100vh;
+    height: -webkit-fill-available;
+  }
+  
+  /* Prevent rubber band scrolling */
+  body {
+    overscroll-behavior-y: none;
+  }
+}
+
+/* Specific fixes for components that were affected by mobile CSS */
+
+/* Fix emoji buttons in chat/gala - keep them small */
+.emoji-button,
+button[title*="React with"] {
+  min-height: unset !important;
+  min-width: unset !important;
+  padding: 0.25rem !important;
+}
+
+/* Fix dots in carousels and pagination */
+.w-3.h-3.rounded-full,
+.carousel-dot,
+.pagination-dot {
+  min-height: unset !important;
+  min-width: unset !important;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+/* Fix reply boxes - prevent overflow */
+.reply-indicator,
+.bg-pink-50\/90,
+.bg-purple-50\/90 {
+  max-width: calc(100vw - 2rem) !important;
+  overflow: hidden !important;
+}
+
+.reply-indicator .flex-1 {
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.reply-indicator p {
+  word-break: break-word !important;
+  overflow-wrap: break-word !important;
+  max-width: 100% !important;
+}
+
+/* Fix utility bar buttons under messages */
+.group-hover\:opacity-100 button,
+.opacity-0.group-hover\:opacity-100 button {
+  min-height: unset !important;
+  min-width: unset !important;
+  padding: 0.25rem !important;
+}
+
+/* Fix small UI buttons */
+button.p-1,
+button.p-1\.5 {
+  min-height: unset !important;
+  min-width: unset !important;
+}
+
+/* Fix navigation dots specifically */
+button.w-3.h-3 {
+  min-height: 0.75rem !important;
+  min-width: 0.75rem !important;
+  width: 0.75rem !important;
+  height: 0.75rem !important;
+}
+
+/* Fix carousel dots in image messages */
+.w-2.h-2.rounded-full,
+.w-4.h-2.rounded-full {
+  min-height: unset !important;
+  min-width: unset !important;
+}
+
+.w-2.h-2 {
+  width: 0.5rem !important;
+  height: 0.5rem !important;
+}
+
+.w-4.h-2 {
+  width: 1rem !important;
+  height: 0.5rem !important;
+}
+
+/* Ensure message containers don't overflow */
+.message-container,
+.space-y-4 > div {
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+

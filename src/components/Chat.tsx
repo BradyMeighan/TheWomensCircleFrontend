@@ -2155,8 +2155,8 @@ function Chat({ onBack, user }: ChatProps) {
             <div className="max-w-4xl mx-auto">
               {/* Reply Indicator */}
               {replyingTo && (
-                <div className="mb-3 flex items-center justify-between bg-pink-50/90 backdrop-blur-sm border border-pink-200 rounded-lg p-3">
-                  <div className="flex-1 min-w-0">
+                <div className="mb-3 flex items-center justify-between bg-pink-50/90 backdrop-blur-sm border border-pink-200 rounded-lg p-3 reply-indicator max-w-full">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <div className="flex items-center space-x-2 text-sm">
                       <svg className="w-4 h-4 text-pink-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />

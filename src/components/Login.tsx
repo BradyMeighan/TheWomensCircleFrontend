@@ -20,10 +20,11 @@ function Login({ onLogin, onForgotPassword, onCreateAccount }: LoginProps) {
   useEffect(() => {
     const shouldShow = shouldShowInstallInstructions() && !hasSeenInstallInstructions()
     if (shouldShow) {
-      // Show after a short delay to let the page load
+      // Show after a longer delay to let the user get oriented first
+      // This prevents the prompt from appearing immediately and confusing users
       setTimeout(() => {
         setShowInstallPrompt(true)
-      }, 1500)
+      }, 5000) // Increased from 1.5s to 5s
     }
   }, [])
 

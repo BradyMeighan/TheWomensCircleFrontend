@@ -65,6 +65,16 @@ export const shouldShowInstallInstructions = (): boolean => {
     return false
   }
   
+  // Don't show if user has dismissed it recently (within 24 hours)
+  const lastDismissed = localStorage.getItem('pwa-install-dismissed')
+  if (lastDismissed) {
+    const dismissedTime = parseInt(lastDismissed, 10)
+    const twentyFourHours = 24 * 60 * 60 * 1000
+    if (Date.now() - dismissedTime < twentyFourHours) {
+      return false
+    }
+  }
+  
   // Show for mobile devices
   if (isIOS() || isAndroid()) {
     return true
@@ -80,6 +90,7 @@ export const hasSeenInstallInstructions = (): boolean => {
 
 export const markInstallInstructionsSeen = (): void => {
   localStorage.setItem('pwa-install-seen', 'true')
+  localStorage.setItem('pwa-install-dismissed', Date.now().toString())
 }
 
 

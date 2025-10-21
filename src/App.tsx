@@ -5,6 +5,7 @@ import { AnimatePresence } from 'framer-motion'
 import Splash from './components/Splash'
 import { notificationService } from './utils/notifications'
 import { startTokenRefreshTimer, stopTokenRefreshTimer } from './config/api'
+import { initMobileFixes } from './utils/mobile'
 import Login from './components/Login'
 import Home from './components/Home'
 import ForgotPassword from './components/ForgotPassword'
@@ -43,6 +44,9 @@ function App() {
   const [sessionExpiredMessage, setSessionExpiredMessage] = useState<string | null>(null)
 
   useEffect(() => {
+    // Initialize mobile fixes
+    initMobileFixes()
+    
     // Check if user is remembered and token exists
     const rememberedUser = localStorage.getItem('rememberedUser')
     const authToken = localStorage.getItem('authToken')
