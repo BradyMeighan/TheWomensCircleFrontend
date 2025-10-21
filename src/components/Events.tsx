@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { AddToCalendarButton } from 'add-to-calendar-button-react'
 import PaymentModal from './PaymentModal'
+import { useSafeTimeoutHook } from '../utils/timeout'
 
 interface EventsProps {
   onBack: () => void
@@ -69,6 +70,9 @@ function Events({ onBack, user }: EventsProps) {
   const [isCreating, setIsCreating] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string>('')
+  
+  // Safe timeout management to prevent memory leaks
+  const { safeSetTimeout } = useSafeTimeoutHook()
 
   useEffect(() => {
     fetchEvents()
@@ -149,7 +153,7 @@ function Events({ onBack, user }: EventsProps) {
         oscillator.stop(audioContext.currentTime + 0.05)
         
         // Remove indicator after animation
-        setTimeout(() => {
+        safeSetTimeout(() => {
           setTouchIndicators(prev => prev.filter(i => i.id !== id))
         }, 1000)
         
@@ -203,7 +207,7 @@ function Events({ onBack, user }: EventsProps) {
     setIsCreating(true)
     
     // Failsafe: Force clear loading state after 90 seconds no matter what
-    const failsafeTimeout = setTimeout(() => {
+    const failsafeTimeout = safeSetTimeout(() => {
       console.error('⏰ Failsafe timeout triggered - forcing loading state clear')
       setIsCreating(false)
       alert('The request is taking too long. Please check your internet connection and try again.')
@@ -319,7 +323,7 @@ function Events({ onBack, user }: EventsProps) {
     setIsUpdating(true)
     
     // Failsafe: Force clear loading state after 90 seconds no matter what
-    const failsafeTimeout = setTimeout(() => {
+    const failsafeTimeout = safeSetTimeout(() => {
       console.error('⏰ Failsafe timeout triggered - forcing loading state clear')
       setIsUpdating(false)
       alert('The request is taking too long. Please check your internet connection and try again.')
@@ -559,7 +563,7 @@ function Events({ onBack, user }: EventsProps) {
     
     try {
       // Small delay to allow webhook to process
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await new Promise(resolve => safeSetTimeout(resolve, 1000))
       
       // Refresh events to show user as attending
       const { apiCall } = await import('../config/api')

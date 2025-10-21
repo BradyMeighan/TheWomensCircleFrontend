@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { notificationService } from '../utils/notifications'
+import { useSafeTimeoutHook } from '../utils/timeout'
 import { apiCall } from '../config/api'
 
 interface AppSettingsProps {
@@ -53,6 +54,9 @@ function AppSettings({ onBack, user }: AppSettingsProps) {
   const [showDebug, setShowDebug] = useState(false)
   const [pushEventLogs, setPushEventLogs] = useState<string[]>([])
   const [showPushDebug, setShowPushDebug] = useState(false)
+  
+  // Safe timeout management to prevent memory leaks
+  const { safeSetTimeout } = useSafeTimeoutHook()
 
   // Debug logger that shows on UI
   const addDebugLog = (message: string) => {
@@ -143,7 +147,7 @@ function AppSettings({ onBack, user }: AppSettingsProps) {
         localStorage.setItem(`app_settings_${user?.username}`, JSON.stringify(settings))
         
         setSuccess('Settings saved successfully!')
-        setTimeout(() => setSuccess(''), 3000)
+        safeSetTimeout(() => setSuccess(''), 3000)
       } else {
         throw new Error('Failed to save settings to server')
       }
@@ -152,7 +156,7 @@ function AppSettings({ onBack, user }: AppSettingsProps) {
       // Fallback to localStorage
       localStorage.setItem(`app_settings_${user?.username}`, JSON.stringify(settings))
       setSuccess('Settings saved locally!')
-      setTimeout(() => setSuccess(''), 3000)
+      safeSetTimeout(() => setSuccess(''), 3000)
     } finally {
       setSaving(false)
     }
@@ -230,7 +234,7 @@ function AppSettings({ onBack, user }: AppSettingsProps) {
           // Add timeout to catch hanging init
           const initPromise = notificationService.init()
           const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Init timeout after 10 seconds')), 10000)
+            safeSetTimeout(() => reject(new Error('Init timeout after 10 seconds')), 10000)
           )
           
           addDebugLog('🔧 Calling notificationService.init() with timeout...')

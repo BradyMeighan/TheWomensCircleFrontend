@@ -4,6 +4,7 @@ import { io, Socket } from 'socket.io-client'
 import { apiCall } from '../config/api'
 import VoiceRecorder from './VoiceRecorder'
 import AudioPlayer from './AudioPlayer'
+import { useSafeTimeoutHook } from '../utils/timeout'
 
 // Utility function to convert URLs to clickable links
 const linkifyText = (text: string) => {
@@ -113,7 +114,7 @@ function Chat({ onBack, user }: ChatProps) {
   const [showSidebar, setShowSidebar] = useState(false)
   const [showImageHint, setShowImageHint] = useState<string | null>(null) // Track which image is showing hint
   const [carouselIndexes, setCarouselIndexes] = useState<Record<string, number>>({}) // Track carousel index for each message
-  const [longPressTimer, setLongPressTimer] = useState<number | null>(null)
+  const longPressTimerRef = useRef<NodeJS.Timeout | null>(null) // Use ref instead of state to avoid memory leaks
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [showDirectMessageModal, setShowDirectMessageModal] = useState(false)
   const [showEditGroupModal, setShowEditGroupModal] = useState(false)
@@ -162,6 +163,9 @@ function Chat({ onBack, user }: ChatProps) {
   const [hasMoreMessages, setHasMoreMessages] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
   // const [activeReactionsForMessageId, setActiveReactionsForMessageId] = useState<string | null>(null)
+  
+  // Safe timeout management to prevent memory leaks
+  const { safeSetTimeout } = useSafeTimeoutHook()
 
   // Group channels by type (hide gala-chat as it has its own dedicated component)
   const communityChannels = channels.filter(ch => ch.type === 'general' && ch.slug !== 'gala-chat')
@@ -181,7 +185,7 @@ function Chat({ onBack, user }: ChatProps) {
   // Handle input focus for mobile keyboards
   const handleInputFocus = () => {
     // Scroll the input into view after a brief delay for mobile keyboards
-    setTimeout(() => {
+    safeSetTimeout(() => {
       if (inputRef.current) {
         inputRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
       }
@@ -219,7 +223,7 @@ function Chat({ onBack, user }: ChatProps) {
       // Update unread counts when new message arrives
       fetchUnreadCounts()
       
-      setTimeout(() => {
+      safeSetTimeout(() => {
         requestAnimationFrame(() => scrollToBottom())
       }, 50)
     })
@@ -254,6 +258,7 @@ function Chat({ onBack, user }: ChatProps) {
       newSocket.off('new-message')
       newSocket.off('message-reaction')
       newSocket.off('message-deleted')
+      newSocket.off('message-edited')
       newSocket.disconnect()
     }
   }, [])
@@ -350,7 +355,7 @@ function Chat({ onBack, user }: ChatProps) {
           shouldAutoScroll.current = true // Auto-scroll on initial load
           setMessages(newMessages)
           // Ensure scroll to bottom on initial load
-          setTimeout(() => {
+          safeSetTimeout(() => {
             requestAnimationFrame(() => scrollToBottom())
           }, 100)
         }
@@ -456,7 +461,7 @@ function Chat({ onBack, user }: ChatProps) {
     // Focus back to input and set cursor position
     if (inputRef.current) {
       const newCursorPos = mentionStartPos + mentionText.length + 1
-      setTimeout(() => {
+      safeSetTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus()
           inputRef.current.setSelectionRange(newCursorPos, newCursorPos)
@@ -527,7 +532,7 @@ function Chat({ onBack, user }: ChatProps) {
         shouldAutoScroll.current = true
         
         // Scroll to bottom after DOM updates
-        setTimeout(() => {
+        safeSetTimeout(() => {
           requestAnimationFrame(() => scrollToBottom())
         }, 50)
         
@@ -654,7 +659,7 @@ function Chat({ onBack, user }: ChatProps) {
       
       // Scroll to bottom
       shouldAutoScroll.current = true
-      setTimeout(() => {
+      safeSetTimeout(() => {
         requestAnimationFrame(() => scrollToBottom())
       }, 50)
 
@@ -786,7 +791,7 @@ function Chat({ onBack, user }: ChatProps) {
         shouldAutoScroll.current = true
         
         // Scroll to bottom
-        setTimeout(() => {
+        safeSetTimeout(() => {
           requestAnimationFrame(() => scrollToBottom())
         }, 50)
         
@@ -822,7 +827,7 @@ function Chat({ onBack, user }: ChatProps) {
       socket.emit('join-channels', [channel._id])
     }
     // Ensure scroll to bottom after switching
-    setTimeout(() => {
+    safeSetTimeout(() => {
       requestAnimationFrame(() => scrollToBottom())
     }, 150)
   }
@@ -1311,7 +1316,7 @@ function Chat({ onBack, user }: ChatProps) {
       link.click()
       
       // Clean up after a short delay
-      setTimeout(() => {
+      safeSetTimeout(() => {
         document.body.removeChild(link)
         URL.revokeObjectURL(url)
       }, 100)
@@ -1348,8 +1353,8 @@ function Chat({ onBack, user }: ChatProps) {
   }
 
   const handleImageLongPress = (imageUrl: string, filename?: string) => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer)
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
     }
     
     const timer = setTimeout(() => {
@@ -1357,15 +1362,24 @@ function Chat({ onBack, user }: ChatProps) {
       saveImage(imageUrl, filename)
     }, 500) // 500ms long press
     
-    setLongPressTimer(timer)
+    longPressTimerRef.current = timer
   }
 
   const handleImagePressEnd = () => {
-    if (longPressTimer) {
-      clearTimeout(longPressTimer)
-      setLongPressTimer(null)
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
     }
   }
+  
+  // Cleanup longPressTimer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) {
+        clearTimeout(longPressTimerRef.current)
+      }
+    }
+  }, [])
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -1795,7 +1809,7 @@ function Chat({ onBack, user }: ChatProps) {
                                     className="rounded-xl max-w-full max-h-96 object-contain cursor-pointer select-none"
                                     onClick={() => {
                                       setShowImageHint(message._id)
-                                      setTimeout(() => setShowImageHint(null), 3000)
+                                      safeSetTimeout(() => setShowImageHint(null), 3000)
                                     }}
                                     onMouseDown={() => handleImageLongPress(message.attachments?.[0]?.url || '', message.attachments?.[0]?.filename)}
                                     onMouseUp={handleImagePressEnd}
@@ -1854,7 +1868,7 @@ function Chat({ onBack, user }: ChatProps) {
                                         transition={{ duration: 0.3, ease: "easeOut" }}
                                         onClick={() => {
                                           setShowImageHint(message._id)
-                                          setTimeout(() => setShowImageHint(null), 3000)
+                                          safeSetTimeout(() => setShowImageHint(null), 3000)
                                         }}
                                         onMouseDown={() => {
                                           const currentIndex = carouselIndexes[message._id] || 0
