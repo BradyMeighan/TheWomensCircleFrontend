@@ -113,6 +113,7 @@ function Gala({ onBack, user }: GalaProps) {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [mentionStartPos, setMentionStartPos] = useState(0)
   const [channelMembers, setChannelMembers] = useState<any[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   
   const messagesContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -194,7 +195,8 @@ function Gala({ onBack, user }: GalaProps) {
       console.error('Gala: Error fetching channel members:', error)
       // Try fallback even on error
       try {
-        const allUsersResponse = await apiCall('/api/user/all', 'GET')
+        const { apiCall: fallbackApiCall } = await import('../config/api')
+        const allUsersResponse = await fallbackApiCall('/api/user/all', 'GET')
         if (allUsersResponse.success && allUsersResponse.data) {
           setChannelMembers(allUsersResponse.data)
         }
@@ -288,6 +290,36 @@ function Gala({ onBack, user }: GalaProps) {
     }
   }
 
+  // Mark messages as read for Gala channel
+  const markMessagesAsRead = async (galaChannelId?: string) => {
+    const targetChannelId = galaChannelId || channelId
+    if (!targetChannelId) return
+    
+    try {
+      const { apiCall } = await import('../config/api')
+      await apiCall(`/api/chat/mark-read/${targetChannelId}`, 'POST')
+      // Reset unread count after marking as read
+      setUnreadCount(0)
+    } catch (error) {
+      console.error('Failed to mark Gala messages as read:', error)
+    }
+  }
+
+  // Fetch unread count for Gala
+  const fetchUnreadCount = async () => {
+    if (!channelId) return
+    
+    try {
+      const { apiCall } = await import('../config/api')
+      const response = await apiCall('/api/chat/unread-counts', 'GET')
+      if (response.success && response.data[channelId]) {
+        setUnreadCount(response.data[channelId])
+      }
+    } catch (error) {
+      console.error('Failed to fetch Gala unread count:', error)
+    }
+  }
+
   const initializeGalaChat = async () => {
     try {
       const api = await import('../config/api')
@@ -301,6 +333,15 @@ function Gala({ onBack, user }: GalaProps) {
         setHasMoreMessages(response.data.hasMore)
         setCurrentPage(1)
         setChannelId(response.data.channelId) // Store the channel ID
+        
+        // Mark messages as read when entering Gala
+        if (response.data.channelId) {
+          markMessagesAsRead(response.data.channelId)
+        }
+        
+        // Fetch initial unread count
+        fetchUnreadCount()
+        
         // Scroll to bottom after messages load
         setTimeout(() => {
           requestAnimationFrame(() => scrollToBottom())

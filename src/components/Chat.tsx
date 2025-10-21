@@ -133,6 +133,7 @@ function Chat({ onBack, user }: ChatProps) {
   const [selectedMentionIndex, setSelectedMentionIndex] = useState(0)
   const [mentionStartPos, setMentionStartPos] = useState(0)
   const [channelMembers, setChannelMembers] = useState<any[]>([])
+  const [unreadCounts, setUnreadCounts] = useState<{ [channelId: string]: number }>({})
   const [editChannelData, setEditChannelData] = useState({
     sortOrder: 0
   })
@@ -214,6 +215,10 @@ function Chat({ onBack, user }: ChatProps) {
         if (exists) return prev
         return [...prev, message]
       })
+      
+      // Update unread counts when new message arrives
+      fetchUnreadCounts()
+      
       setTimeout(() => {
         requestAnimationFrame(() => scrollToBottom())
       }, 50)
@@ -240,6 +245,7 @@ function Chat({ onBack, user }: ChatProps) {
     setSocket(newSocket)
     fetchChannels()
     fetchAllUsers()
+    fetchUnreadCounts()
 
     return () => {
       console.log('🔌 Cleaning up socket connection')
@@ -809,6 +815,9 @@ function Chat({ onBack, user }: ChatProps) {
     fetchMessages(channel._id)
     setShowSidebar(false) // Close sidebar on mobile
     
+    // Mark messages as read when switching to channel
+    markMessagesAsRead(channel._id)
+    
     if (socket) {
       socket.emit('join-channels', [channel._id])
     }
@@ -816,6 +825,34 @@ function Chat({ onBack, user }: ChatProps) {
     setTimeout(() => {
       requestAnimationFrame(() => scrollToBottom())
     }, 150)
+  }
+
+  // Mark messages as read for current channel
+  const markMessagesAsRead = async (channelId?: string) => {
+    const targetChannelId = channelId || selectedChannel?._id
+    if (!targetChannelId) return
+    
+    try {
+      const { apiCall } = await import('../config/api')
+      await apiCall(`/api/chat/mark-read/${targetChannelId}`, 'POST')
+      // Refresh unread counts after marking as read
+      fetchUnreadCounts()
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error)
+    }
+  }
+
+  // Fetch unread message counts for all channels
+  const fetchUnreadCounts = async () => {
+    try {
+      const { apiCall } = await import('../config/api')
+      const response = await apiCall('/api/chat/unread-counts', 'GET')
+      if (response.success) {
+        setUnreadCounts(response.data)
+      }
+    } catch (error) {
+      console.error('Failed to fetch unread counts:', error)
+    }
   }
 
   const createGroup = async () => {
@@ -1575,6 +1612,7 @@ function Chat({ onBack, user }: ChatProps) {
           setShowCreateGroup={setShowCreateGroup}
           setShowDirectMessageModal={setShowDirectMessageModal}
           setShowCreateChannelModal={setShowCreateChannelModal}
+          unreadCounts={unreadCounts}
         />
       </div>
 
@@ -1612,6 +1650,7 @@ function Chat({ onBack, user }: ChatProps) {
                 onDeleteGroup={deleteGroup}
                 onManageAccess={startManageAccess}
                 setShowCreateChannelModal={setShowCreateChannelModal}
+                unreadCounts={unreadCounts}
               />
             </motion.div>
           </>
@@ -2896,7 +2935,8 @@ function SidebarContent({
   user,
   setShowCreateGroup,
   setShowDirectMessageModal,
-  setShowCreateChannelModal
+  setShowCreateChannelModal,
+  unreadCounts
 }: any) {
   // Helper function to get display name for direct messages
   const getDMDisplayName = (channel: Channel) => {
@@ -2977,6 +3017,7 @@ function SidebarContent({
                 isSelected={selectedChannel?._id === channel._id}
                 onClick={() => selectChannel(channel)}
                 icon={getChannelIcon(channel.type, channel.name)}
+                unreadCount={unreadCounts[channel._id] || 0}
               />
             ))}
           </div>
@@ -3023,6 +3064,7 @@ function SidebarContent({
                 isSelected={selectedChannel?._id === channel._id}
                 onClick={() => selectChannel(channel)}
                 icon={getChannelIcon(channel.type, channel.name)}
+                unreadCount={unreadCounts[channel._id] || 0}
               />
             ))}
           </div>
@@ -3049,6 +3091,7 @@ function SidebarContent({
                 isSelected={selectedChannel?._id === channel._id}
                 onClick={() => selectChannel(channel)}
                 icon={getChannelIcon(channel.type, channel.name)}
+                unreadCount={unreadCounts[channel._id] || 0}
               />
             ))}
             {directMessages.length === 0 && (
@@ -3062,11 +3105,11 @@ function SidebarContent({
 }
 
 // Channel Item Component
-function ChannelItem({ channel, isSelected, onClick, icon }: any) {
+function ChannelItem({ channel, isSelected, onClick, icon, unreadCount }: any) {
   return (
     <motion.button
       onClick={onClick}
-      className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center space-x-2 ${
+      className={`w-full text-left px-2 py-1.5 rounded text-sm flex items-center space-x-2 relative ${
         isSelected
           ? 'bg-pink-100 text-pink-800 font-medium'
           : 'text-gray-700 hover:bg-gray-100'
@@ -3075,7 +3118,12 @@ function ChannelItem({ channel, isSelected, onClick, icon }: any) {
       transition={{ duration: 0.15 }}
     >
       <span className="text-gray-500 font-mono text-sm">{icon}</span>
-      <span className="truncate">{channel.name}</span>
+      <span className="truncate flex-1">{channel.name}</span>
+      {unreadCount && unreadCount > 0 && (
+        <span className="bg-red-500 text-white text-xs font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1 ml-auto">
+          {unreadCount > 99 ? '99+' : unreadCount}
+        </span>
+      )}
     </motion.button>
   )
 }

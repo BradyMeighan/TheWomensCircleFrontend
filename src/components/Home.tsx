@@ -22,6 +22,8 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
   const [userProfile, setUserProfile] = useState<any>(null)
   const [recentActivity, setRecentActivity] = useState<any[]>([])
   const [eventCount, setEventCount] = useState<number>(0)
+  const [unreadCounts, setUnreadCounts] = useState<{ [channelId: string]: number }>({})
+  const [galaChannelId, setGalaChannelId] = useState<string | null>(null)
   const profileMenuRef = useRef<HTMLDivElement>(null)
 
   // Fetch recent activity
@@ -45,6 +47,28 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
       }
     } catch (error) {
       console.error('Failed to fetch events:', error)
+    }
+  }
+
+  // Fetch unread message counts
+  const fetchUnreadCounts = async () => {
+    try {
+      const { apiCall } = await import('../config/api')
+      const response = await apiCall('/api/chat/unread-counts', 'GET')
+      if (response.success) {
+        setUnreadCounts(response.data)
+        
+        // Get Gala channel ID
+        const channelsResponse = await apiCall('/api/chat/channels', 'GET')
+        if (channelsResponse.success) {
+          const galaChannel = channelsResponse.data.find((ch: any) => ch.slug === 'gala-chat')
+          if (galaChannel) {
+            setGalaChannelId(galaChannel._id)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to fetch unread counts:', error)
     }
   }
 
@@ -72,6 +96,7 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
       fetchUserProfile()
       fetchRecentActivity()
       fetchEventCount()
+      fetchUnreadCounts()
     }
   }, [user])
 
@@ -103,6 +128,32 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
       })
     }
   }
+
+  // Calculate total unread messages for Chat (excluding Gala)
+  const getChatUnreadCount = () => {
+    if (!galaChannelId) return 0
+    return Object.entries(unreadCounts)
+      .filter(([channelId]) => channelId !== galaChannelId)
+      .reduce((total, [, count]) => total + count, 0)
+  }
+
+  // Get Gala unread count
+  const getGalaUnreadCount = () => {
+    if (!galaChannelId) return 0
+    return unreadCounts[galaChannelId] || 0
+  }
+
+  // Set up real-time updates for unread counts
+  useEffect(() => {
+    if (!user) return
+
+    // Refresh unread counts every 30 seconds
+    const interval = setInterval(() => {
+      fetchUnreadCounts()
+    }, 30000)
+
+    return () => clearInterval(interval)
+  }, [user])
 
   // Dynamic greeting based on time of day
   const getGreeting = () => {
@@ -332,12 +383,18 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
           {/* Chatroom */}
           <motion.button 
             onClick={onChat}
-            className="bg-pink-100/80 backdrop-blur-sm border-2 border-gray-800 rounded-3xl p-6 h-32 flex flex-col items-center justify-center space-y-2"
+            className="bg-pink-100/80 backdrop-blur-sm border-2 border-gray-800 rounded-3xl p-6 h-32 flex flex-col items-center justify-center space-y-2 relative"
             variants={buttonVariants}
             initial="rest"
             whileHover="hover"
             whileTap="tap"
           >
+            {/* Unread badge */}
+            {getChatUnreadCount() > 0 && (
+              <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 z-10">
+                {getChatUnreadCount() > 99 ? '99+' : getChatUnreadCount()}
+              </div>
+            )}
             <motion.div 
               className="w-8 h-8 flex items-center justify-center"
               whileHover={{ rotate: 5 }}
@@ -428,12 +485,18 @@ function Home({ onLogout, onAdminDashboard, onMeetTheCircle, onProfileSettings, 
           {/* Gala */}
           <motion.button 
             onClick={onGala}
-            className="bg-teal-100/80 backdrop-blur-sm border-2 border-gray-800 rounded-3xl p-6 h-32 flex flex-col items-center justify-center space-y-2"
+            className="bg-teal-100/80 backdrop-blur-sm border-2 border-gray-800 rounded-3xl p-6 h-32 flex flex-col items-center justify-center space-y-2 relative"
             variants={buttonVariants}
             initial="rest"
             whileHover="hover"
             whileTap="tap"
           >
+            {/* Unread badge */}
+            {getGalaUnreadCount() > 0 && (
+              <div className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full min-w-[20px] h-5 flex items-center justify-center px-1 z-10">
+                {getGalaUnreadCount() > 99 ? '99+' : getGalaUnreadCount()}
+              </div>
+            )}
             <motion.div 
               className="w-8 h-8 flex items-center justify-center"
               whileHover={{ scale: 1.1 }}
